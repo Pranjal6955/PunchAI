@@ -11,10 +11,10 @@ const generateToken = (id: string) => {
 
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { email, password } = req.body;
+        const { fullName, email, password } = req.body;
 
-        if (!email || !password) {
-            res.status(400).json({ message: "Please provide email and password" });
+        if (!fullName || !email || !password) {
+            res.status(400).json({ message: "Please provide fullName, email and password" });
             return;
         }
 
@@ -29,6 +29,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const user = await User.create({
+            fullName,
             email,
             password: hashedPassword,
         });
@@ -36,6 +37,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         if (user) {
             res.status(201).json({
                 _id: user._id,
+                fullName: user.fullName,
                 email: user.email,
                 token: generateToken(user._id.toString()),
             });
@@ -56,6 +58,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         if (user && (await bcrypt.compare(password, user.password))) {
             res.json({
                 _id: user._id,
+                fullName: user.fullName,
                 email: user.email,
                 token: generateToken(user._id.toString()),
             });
@@ -74,6 +77,7 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
         if (user) {
             res.json({
                 _id: user._id,
+                fullName: user.fullName,
                 email: user.email,
             });
             return;
