@@ -59,7 +59,6 @@ export default function LoginPage() {
 
             // Save token (e.g., in localStorage)
             localStorage.setItem("token", data.token);
-            localStorage.setItem("isOnboarded", String(data.isOnboarded));
 
             // Redirect to dashboard
             window.location.href = "/dashboard";

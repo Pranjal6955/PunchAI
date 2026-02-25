@@ -13,17 +13,6 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
-        isOnboarded: {
-            type: Boolean,
-            default: false,
-        },
-        onboarding: {
-            businessName: { type: String },
-            industry: { type: String },
-            websiteUrl: { type: String },
-            chatbotTone: { type: String },
-            languages: { type: [String] },
-        },
     },
     {
         timestamps: true,

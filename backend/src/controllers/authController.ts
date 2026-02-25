@@ -37,7 +37,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
             res.status(201).json({
                 _id: user._id,
                 email: user.email,
-                isOnboarded: user.isOnboarded,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -58,12 +57,29 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
             res.json({
                 _id: user._id,
                 email: user.email,
-                isOnboarded: user.isOnboarded,
                 token: generateToken(user._id.toString()),
             });
         } else {
             res.status(401).json({ message: "Invalid email or password" });
         }
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const getMe = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user = await User.findById((req as any).user._id).select("-password");
+
+        if (user) {
+            res.json({
+                _id: user._id,
+                email: user.email,
+            });
+            return;
+        }
+
+        res.status(404).json({ message: "User not found" });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }
