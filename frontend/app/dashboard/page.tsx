@@ -52,10 +52,22 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="relative min-h-screen">
-            <div className={`p-8 ${needsOnboarding ? "blur-md pointer-events-none" : ""}`}>
-                <h1 className="text-2xl font-bold tracking-tight">Welcome to Admin Dashboard</h1>
-                <p className="text-muted-foreground mt-2">You are viewing the protected dashboard space.</p>
+        <div className="space-y-4">
+            <div className={`${needsOnboarding ? "blur-md pointer-events-none" : ""}`}>
+                <h1 className="text-3xl font-bold tracking-tight">Welcome to PunchAI</h1>
+                <p className="text-muted-foreground">
+                    Build and manage your generative AI chatbots from this central hub.
+                </p>
+                <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="aspect-video rounded-xl bg-muted/50 flex items-center justify-center border border-dashed">
+                            <span className="text-xs text-muted-foreground">Stat Card {i}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-8 h-[400px] rounded-xl bg-muted/50 flex items-center justify-center border border-dashed">
+                    <span className="text-xs text-muted-foreground">Main Content area</span>
+                </div>
             </div>
 
             {needsOnboarding && <OnboardingScreen onDismiss={() => setNeedsOnboarding(false)} />}
