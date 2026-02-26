@@ -18,6 +18,31 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        isOnboarded: {
+            type: Boolean,
+            default: false,
+        },
+        companyName: {
+            type: String,
+        },
+        industry: {
+            type: String,
+        },
+        websiteUrl: {
+            type: String,
+        },
+        chatbotPersonality: {
+            type: String,
+        },
+        chatbotPurpose: {
+            type: [String],
+        },
+        supportedLanguages: {
+            type: [String],
+        },
+        knowledgeBaseSetup: {
+            type: String,
+        },
     },
     {
         timestamps: true,

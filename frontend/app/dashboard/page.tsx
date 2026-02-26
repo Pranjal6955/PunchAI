@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import OnboardingScreen from "./components/onboardingScreen";
 
 export default function Dashboard() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
+    const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
     useEffect(() => {
         const checkStatus = async () => {
@@ -23,6 +25,10 @@ export default function Dashboard() {
                 });
 
                 if (res.ok) {
+                    const data = await res.json();
+                    if (!data.isOnboarded) {
+                        setNeedsOnboarding(true);
+                    }
                     setLoading(false);
                 } else {
                     localStorage.removeItem("token");
@@ -46,9 +52,13 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="p-8">
-            <h1 className="text-2xl font-bold tracking-tight">Welcome to Admin Dashboard</h1>
-            <p className="text-muted-foreground mt-2">You are viewing the protected dashboard space.</p>
+        <div className="relative min-h-screen">
+            <div className={`p-8 ${needsOnboarding ? "blur-md pointer-events-none" : ""}`}>
+                <h1 className="text-2xl font-bold tracking-tight">Welcome to Admin Dashboard</h1>
+                <p className="text-muted-foreground mt-2">You are viewing the protected dashboard space.</p>
+            </div>
+
+            {needsOnboarding && <OnboardingScreen onDismiss={() => setNeedsOnboarding(false)} />}
         </div>
     );
 }

@@ -39,6 +39,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
                 _id: user._id,
                 fullName: user.fullName,
                 email: user.email,
+                isOnboarded: user.isOnboarded,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -60,6 +61,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
                 _id: user._id,
                 fullName: user.fullName,
                 email: user.email,
+                isOnboarded: user.isOnboarded,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -79,6 +81,7 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
                 _id: user._id,
                 fullName: user.fullName,
                 email: user.email,
+                isOnboarded: user.isOnboarded,
             });
             return;
         }
