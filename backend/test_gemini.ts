@@ -1,0 +1,1 @@
+import { generateEmbedding } from "./src/services/embeddingService"; async function test() { try { const e = await generateEmbedding("Hello World"); console.log("Success with ", e.length, " embeddings"); } catch(err) { console.error(err); } } test();
