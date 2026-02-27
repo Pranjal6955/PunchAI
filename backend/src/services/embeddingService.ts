@@ -20,6 +20,7 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
         const response = await openai.embeddings.create({
             model: "text-embedding-3-small",
             input: text,
+            dimensions: 1024,
         });
 
         return response.data[0].embedding;
@@ -32,7 +33,9 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
             const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
             const result = await model.embedContent(text);
 
-            return result.embedding.values;
+            // Pinecone index is 1024 dimensions, but gemini-embedding-001 returns 3072.
+            // Truncate the values to fit the index size. 
+            return result.embedding.values.slice(0, 1024);
         } catch (geminiError: any) {
             console.error(`Gemini Embedding fallback also failed: ${geminiError.message}`);
             throw new Error("Failed to generate embeddings from both Primary and Backup services.");
