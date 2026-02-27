@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PunchAI – Generative AI Customer Support",
   description: "Automate your customer support with PunchAI, the premium generative AI chatbot platform for modern brands.",
+  icons: {
+    icon: "/Logo_dark_theme.png",
+    shortcut: "/Logo_dark_theme.png",
+    apple: "/Logo_dark_theme.png",
+  }
 };
 
 export default function RootLayout({

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { z } from "zod";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { Loader2, Command } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -104,8 +105,8 @@ export default function SignupPage() {
             localStorage.setItem("user", JSON.stringify({ _id: resData._id, fullName: resData.fullName, email: resData.email }));
 
             router.push("/dashboard");
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "An unexpected error occurred");
         } finally {
             setIsLoading(false);
         }
@@ -119,11 +120,9 @@ export default function SignupPage() {
     return (
         <div className="flex flex-col min-h-screen items-center justify-center bg-muted/30 p-4">
             <DotBackground />
-            <div className="flex items-center gap-2 mb-8 mt-8">
-                <div className="bg-primary/10 p-2 rounded-lg">
-                    <Command className="w-6 h-6 text-primary" />
-                </div>
-                <span className="text-xl font-bold tracking-tight">PunchAI</span>
+            <div className="flex items-center gap-3 mb-8 mt-8">
+                <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={40} height={40} className="object-contain" />
+                <span className="text-2xl font-bold tracking-tight">PunchAI</span>
             </div>
 
             <Card className="w-full max-w-[400px] shadow-lg border-border/60 mb-8">

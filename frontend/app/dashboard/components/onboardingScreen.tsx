@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,9 +21,8 @@ interface OnboardingScreenProps {
 }
 
 export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
-    const router = useRouter();
     const [step, setStep] = useState(1);
-    const [loading, setLoading] = useState(false);
+    const [user, setUser] = useState<{ isOnboarded?: boolean } | null>(null);
     const [formData, setFormData] = useState({
         companyName: "",
         industry: "",
@@ -33,9 +32,107 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
         supportedLanguages: [] as string[],
         knowledgeBaseSetup: "",
     });
+
+    const saveToDatabase = useCallback(async (currentData: typeof formData, stepToSave: number, isFinal: boolean = false) => {
+        try {
+            const token = localStorage.getItem("token");
+            await fetch("http://localhost:5000/api/onboarding", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    ...currentData,
+                    onboardingStep: stepToSave,
+                    isOnboarded: isFinal ? true : (user?.isOnboarded || false)
+                }),
+            });
+            window.dispatchEvent(new Event("onboarding_update"));
+        } catch (error) {
+            console.error("Failed to sync onboarding to database", error);
+        }
+    }, [user?.isOnboarded]);
+
+    // Load saved data on mount
+    useEffect(() => {
+        const savedStep = localStorage.getItem("onboarding_step");
+        if (savedStep) setStep(parseInt(savedStep));
+
+        // Fetch user data including potential partial onboarding from DB
+        const fetchExistingData = async () => {
+            try {
+                const token = localStorage.getItem("token");
+                const res = await fetch("http://localhost:5000/api/auth/me", {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const userData = data.user || data;
+                    setUser(userData);
+
+                    // Set current step from DB if it's further than local storage or if local is default
+                    if (userData.onboardingStep && (!localStorage.getItem("onboarding_step") || userData.onboardingStep > 1)) {
+                        setStep(userData.onboardingStep);
+                    }
+
+                    // Prioritize DB data if local storage is empty
+                    if (!localStorage.getItem("onboarding_form_data")) {
+                        setFormData({
+                            companyName: userData.companyName || "",
+                            industry: userData.industry || "",
+                            websiteUrl: userData.websiteUrl || "",
+                            chatbotPurpose: userData.chatbotPurpose || [],
+                            chatbotPersonality: userData.chatbotPersonality || "",
+                            supportedLanguages: userData.supportedLanguages || [],
+                            knowledgeBaseSetup: userData.knowledgeBaseSetup || "",
+                        });
+                    }
+                }
+            } catch { }
+        };
+
+        fetchExistingData();
+
+        const savedData = localStorage.getItem("onboarding_form_data");
+        if (savedData) {
+            try {
+                setFormData(JSON.parse(savedData));
+            } catch {
+                console.error("Failed to parse saved onboarding data");
+            }
+        }
+    }, []);
+
+    // Persist current step to localStorage and DB
+    useEffect(() => {
+        localStorage.setItem("onboarding_step", step.toString());
+        window.dispatchEvent(new Event("onboarding_update"));
+        if (step > 1) {
+            saveToDatabase(formData, step);
+        }
+    }, [step, formData, saveToDatabase]);
+
+    // Persist form data to localStorage and periodically sync to DB
+    useEffect(() => {
+        localStorage.setItem("onboarding_form_data", JSON.stringify(formData));
+
+        const timeoutId = setTimeout(() => {
+            if (formData.companyName || formData.industry) { // Only sync if some data entered
+                saveToDatabase(formData, step);
+            }
+        }, 2000); // 2 second debounce for DB sync
+
+        return () => clearTimeout(timeoutId);
+    }, [formData, step, saveToDatabase]);
+
+    const [loading, setLoading] = useState(false);
     const [otherLanguage, setOtherLanguage] = useState("");
 
-    const handleNext = () => setStep((prev) => prev + 1);
+    const handleNext = async () => {
+        setStep((prev) => prev + 1);
+    };
+
     const handlePrev = () => setStep((prev) => prev - 1);
 
     const handleCheckboxChange = (field: "chatbotPurpose" | "supportedLanguages", value: string) => {
@@ -61,22 +158,21 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem("token");
-            const response = await fetch("http://localhost:5000/api/onboarding", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(formData),
-            });
+            // Final save with isOnboarded = true
+            await saveToDatabase(formData, step, true);
 
-            if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem("user", JSON.stringify(data.user));
+            // Fetch updated user to update local storage
+            const token = localStorage.getItem("token");
+            const res = await fetch("http://localhost:5000/api/auth/me", {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem("user", JSON.stringify(data.user || data));
+                localStorage.removeItem("onboarding_skipped");
+                localStorage.removeItem("onboarding_step");
+                localStorage.removeItem("onboarding_form_data");
                 window.location.reload(); // Refresh to hide onboarding and show dashboard
-            } else {
-                console.error("Failed to save onboarding data");
             }
         } catch (error) {
             console.error("Error saving onboarding data", error);
@@ -97,11 +193,16 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
                     <X className="h-4 w-4" />
                 </Button>
                 <div className="text-center">
+                    <div className="flex justify-center mb-6">
+                        <div className="p-3 bg-primary/5 rounded-2xl ring-1 ring-primary/10">
+                            <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={48} height={48} className="object-contain" />
+                        </div>
+                    </div>
                     <h2 className="text-2xl font-bold tracking-tight text-foreground">
                         Welcome to PunchAI
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                        Let's set up your chatbot. Step {step} of 5.
+                        Let&apos;s set up your chatbot.
                     </p>
                 </div>
 
@@ -291,7 +392,10 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
                         {step === 1 ? (
                             <Button
                                 variant="ghost"
-                                onClick={onDismiss}
+                                onClick={async () => {
+                                    await saveToDatabase(formData, step);
+                                    if (onDismiss) onDismiss();
+                                }}
                                 className="text-muted-foreground hover:text-foreground"
                             >
                                 Skip for now

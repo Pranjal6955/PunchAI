@@ -12,6 +12,7 @@ export const saveOnboarding = async (req: Request, res: Response): Promise<void>
             chatbotPurpose,
             supportedLanguages,
             knowledgeBaseSetup,
+            onboardingStep,
         } = req.body;
 
         const user = await User.findById(userId);
@@ -21,14 +22,18 @@ export const saveOnboarding = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        user.companyName = companyName;
-        user.industry = industry;
-        user.websiteUrl = websiteUrl;
-        user.chatbotPersonality = chatbotPersonality;
-        user.chatbotPurpose = chatbotPurpose;
-        user.supportedLanguages = supportedLanguages;
-        user.knowledgeBaseSetup = knowledgeBaseSetup;
-        user.isOnboarded = true;
+        user.companyName = companyName || user.companyName;
+        user.industry = industry || user.industry;
+        user.websiteUrl = websiteUrl || user.websiteUrl;
+        user.chatbotPersonality = chatbotPersonality || user.chatbotPersonality;
+        user.chatbotPurpose = chatbotPurpose || user.chatbotPurpose;
+        user.supportedLanguages = supportedLanguages || user.supportedLanguages;
+        user.knowledgeBaseSetup = knowledgeBaseSetup || user.knowledgeBaseSetup;
+        user.onboardingStep = onboardingStep || user.onboardingStep;
+
+        if (req.body.isOnboarded !== undefined) {
+            user.isOnboarded = req.body.isOnboarded;
+        }
 
         await user.save();
 
@@ -46,6 +51,7 @@ export const saveOnboarding = async (req: Request, res: Response): Promise<void>
                 chatbotPurpose: user.chatbotPurpose,
                 supportedLanguages: user.supportedLanguages,
                 knowledgeBaseSetup: user.knowledgeBaseSetup,
+                onboardingStep: user.onboardingStep,
             },
         });
     } catch (error: any) {

@@ -26,7 +26,11 @@ export default function Dashboard() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    if (!data.isOnboarded) {
+
+                    // Check if user has already skipped onboarding in this session/browser
+                    const isSkipped = localStorage.getItem("onboarding_skipped") === "true";
+
+                    if (!data.isOnboarded && !isSkipped) {
                         setNeedsOnboarding(true);
                     }
                     setLoading(false);
@@ -42,6 +46,11 @@ export default function Dashboard() {
 
         checkStatus();
     }, [router]);
+
+    const handleDismissOnboarding = () => {
+        setNeedsOnboarding(false);
+        localStorage.setItem("onboarding_skipped", "true");
+    };
 
     if (loading) {
         return (
@@ -70,7 +79,7 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {needsOnboarding && <OnboardingScreen onDismiss={() => setNeedsOnboarding(false)} />}
+            {needsOnboarding && <OnboardingScreen onDismiss={handleDismissOnboarding} />}
         </div>
     );
 }

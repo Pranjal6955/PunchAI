@@ -82,6 +82,14 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
                 fullName: user.fullName,
                 email: user.email,
                 isOnboarded: user.isOnboarded,
+                onboardingStep: user.onboardingStep,
+                companyName: user.companyName,
+                industry: user.industry,
+                websiteUrl: user.websiteUrl,
+                chatbotPersonality: user.chatbotPersonality,
+                chatbotPurpose: user.chatbotPurpose,
+                supportedLanguages: user.supportedLanguages,
+                knowledgeBaseSetup: user.knowledgeBaseSetup,
             });
             return;
         }

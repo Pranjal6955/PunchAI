@@ -43,6 +43,10 @@ const userSchema = new mongoose.Schema(
         knowledgeBaseSetup: {
             type: String,
         },
+        onboardingStep: {
+            type: Number,
+            default: 1,
+        },
     },
     {
         timestamps: true,

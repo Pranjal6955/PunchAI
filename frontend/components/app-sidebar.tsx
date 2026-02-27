@@ -2,21 +2,20 @@
 
 import * as React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
     LayoutDashboard,
     MessageSquare,
-    Users,
     Settings,
     HelpCircle,
-    BarChart3,
-    Sparkles,
-    Command,
+    Database,
+    BotMessageSquare,
+    Blocks,
 } from "lucide-react"
 
 import {
     Sidebar,
     SidebarContent,
-    SidebarFooter,
     SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
@@ -29,25 +28,30 @@ import {
 
 const navMain = [
     {
-        title: "Dashboard",
+        title: "Overview",
         url: "/dashboard",
         icon: LayoutDashboard,
         isActive: true,
     },
     {
-        title: "Analytics",
-        url: "/dashboard/analytics",
-        icon: BarChart3,
-    },
-    {
-        title: "Chatbots",
-        url: "/dashboard/chatbots",
+        title: "Chat Logs",
+        url: "/dashboard/chatlogs",
         icon: MessageSquare,
     },
     {
-        title: "Users",
-        url: "/dashboard/users",
-        icon: Users,
+        title: "Data Sources",
+        url: "/dashboard/datasources",
+        icon: Database,
+    },
+    {
+        title: "Bot Configuration",
+        url: "/dashboard/botconfiguration",
+        icon: BotMessageSquare,
+    },
+    {
+        title: "Integrations",
+        url: "/dashboard/integrations",
+        icon: Blocks,
     },
 ]
 
@@ -72,12 +76,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
                             <Link href="/dashboard">
-                                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                                    <Command className="size-4" />
+                                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                                    <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={24} height={24} className="object-contain" />
                                 </div>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
-                                    <span className="truncate font-semibold">PunchAI</span>
-                                    <span className="truncate text-xs">GenAI Support</span>
+                                    <span className="truncate font-semibold text-lg">PunchAI</span>
+                                    <span className="truncate text-xs text-muted-foreground">GenAI Support</span>
                                 </div>
                             </Link>
                         </SidebarMenuButton>
@@ -119,21 +123,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
-            <SidebarFooter>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent/50 text-sidebar-accent-foreground">
-                                <Sparkles className="size-4" />
-                            </div>
-                            <div className="grid flex-1 text-left text-sm leading-tight">
-                                <span className="truncate font-semibold">Upgrade to Pro</span>
-                                <span className="truncate text-xs">Unlock advanced AI</span>
-                            </div>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarFooter>
             <SidebarRail />
         </Sidebar>
     )
