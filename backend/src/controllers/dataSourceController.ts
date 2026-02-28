@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import DataSource from "../models/DataSource";
-import { processDataSource, removeDataSourceProcessing } from "../services/ragService";
+import { processDataSource, removeDataSourceProcessing, reprocessProvidedText } from "../services/ragService";
 
 // Helper for type
 interface AuthRequest extends Request {
@@ -99,15 +99,22 @@ export const uploadDocumentSource = async (req: AuthRequest, res: Response): Pro
 export const addFaqSource = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?._id;
-        const { name, question, answer } = req.body;
+        let { name, question, answer, faqs } = req.body;
 
         if (!userId) {
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
 
-        if (!name || !question || !answer) {
-            res.status(400).json({ message: "Name, question, and answer are required" });
+        // Support both old format (question/answer) and new format (faqs array)
+        if (!faqs || faqs.length === 0) {
+            if (question && answer) {
+                faqs = [{ question, answer }];
+            }
+        }
+
+        if (!name || !faqs || faqs.length === 0) {
+            res.status(400).json({ message: "Name and at least one FAQ are required" });
             return;
         }
 
@@ -116,7 +123,7 @@ export const addFaqSource = async (req: AuthRequest, res: Response): Promise<voi
             userId,
             name,
             type: "faq",
-            faqs: [{ question, answer }],
+            faqs: faqs,
             status: "pending",
         });
 
@@ -302,6 +309,71 @@ export const deleteDataSource = async (req: AuthRequest, res: Response): Promise
         res.status(200).json({ message: "Data source deleted" });
     } catch (error) {
         console.error("Error deleting data source:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+export const updateDataSourceText = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?._id;
+        const { id } = req.params;
+        const { extractedText } = req.body;
+
+        if (!userId) {
+            res.status(401).json({ message: "Unauthorized" });
+            return;
+        }
+
+        const dataSource = await DataSource.findOne({ _id: id, userId });
+        if (!dataSource) {
+            res.status(404).json({ message: "Data source not found" });
+            return;
+        }
+
+        if (dataSource.extractedText !== extractedText) {
+            dataSource.extractedText = extractedText;
+            dataSource.status = "pending";
+            await dataSource.save();
+
+            reprocessProvidedText(dataSource._id.toString(), extractedText);
+        }
+
+        res.status(200).json(dataSource);
+    } catch (error) {
+        console.error("Error updating data source text:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+export const downloadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?._id;
+        const { id } = req.params;
+
+        if (!userId) {
+            res.status(401).json({ message: "Unauthorized" });
+            return;
+        }
+
+        const dataSource = await DataSource.findOne({ _id: id, userId });
+        if (!dataSource || dataSource.type !== "document" || !dataSource.fileUrl) {
+            res.status(404).json({ message: "Data source document not found" });
+            return;
+        }
+
+        const [path, mimetype] = dataSource.fileUrl.split(":::");
+
+        res.setHeader("Content-Type", mimetype || "application/octet-stream");
+        res.download(path, dataSource.name, (err) => {
+            if (err) {
+                console.error("File download error:", err);
+                if (!res.headersSent) {
+                    res.status(404).json({ message: "File not found on server" });
+                }
+            }
+        });
+    } catch (error) {
+        console.error("Error downloading document:", error);
         res.status(500).json({ message: "Server error" });
     }
 };

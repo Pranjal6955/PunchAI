@@ -10,7 +10,9 @@ import {
     updateDataSource,
     updateFaqSource,
     updateWebsiteSource,
-    updateDocumentSource
+    updateDocumentSource,
+    updateDataSourceText,
+    downloadDocument
 } from "../controllers/dataSourceController";
 
 const router = express.Router();
@@ -19,6 +21,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get("/", getSources);
+router.get("/:id/download", downloadDocument);
 
 // Create routes
 router.post("/website", addWebsiteSource);
@@ -30,6 +33,7 @@ router.put("/:id", updateDataSource); // generic top-level info (like name)
 router.put("/website/:id", updateWebsiteSource);
 router.put("/document/:id", upload.single("document"), updateDocumentSource);
 router.put("/faq/:id", updateFaqSource);
+router.put("/text/:id", updateDataSourceText);
 
 // Delete routes
 router.delete("/:id", deleteDataSource);

@@ -43,6 +43,9 @@ const dataSourceSchema = new mongoose.Schema(
         errorMessage: {
             type: String,
         },
+        extractedText: {
+            type: String,
+        },
     },
     {
         timestamps: true,

@@ -59,9 +59,69 @@ export const processDataSource = async (dataSourceId: string) => {
         dataSource.status = "completed";
         dataSource.vectorCount = vectors.length;
         dataSource.errorMessage = undefined;
+        dataSource.extractedText = extractedText;
         await dataSource.save();
     } catch (error: any) {
         console.error(`Error processing data source ${dataSourceId}:`, error);
+
+        try {
+            const dataSource = await DataSource.findById(dataSourceId);
+            if (dataSource) {
+                dataSource.status = "failed";
+                dataSource.errorMessage = error.message.slice(0, 1000);
+                await dataSource.save();
+            }
+        } catch (dbError) {
+            console.error("Critical failure writing status to DB", dbError);
+        }
+    }
+};
+
+/**
+ * Async processing to manual re-embed user-edited text
+ */
+export const reprocessProvidedText = async (dataSourceId: string, customText: string) => {
+    try {
+        const dataSource = await DataSource.findById(dataSourceId);
+        if (!dataSource) throw new Error("DataSource not found");
+
+        dataSource.status = "processing";
+        await dataSource.save();
+
+        if (!customText || customText.trim() === "") {
+            throw new Error("No text content provided to process");
+        }
+
+        // Delete previous vectors
+        await deleteVectorsByDataSource(dataSourceId);
+
+        const chunks = chunkText(customText, 500);
+        const vectors: VectorData[] = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const embedding = await generateEmbedding(chunk);
+            vectors.push({
+                id: `ds_${dataSource._id.toString()}_${uuidv4()}`,
+                values: embedding,
+                metadata: {
+                    dataSourceId: dataSource._id.toString(),
+                    userId: dataSource.userId.toString(),
+                    sourceType: dataSource.type,
+                    text: chunk,
+                },
+            });
+        }
+
+        await upsertVectors(vectors);
+
+        dataSource.status = "completed";
+        dataSource.vectorCount = vectors.length;
+        dataSource.errorMessage = undefined;
+        dataSource.extractedText = customText;
+        await dataSource.save();
+    } catch (error: any) {
+        console.error(`Error processing custom text for ${dataSourceId}:`, error);
 
         try {
             const dataSource = await DataSource.findById(dataSourceId);

@@ -1,13 +1,11 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Dispatch, SetStateAction } from "react";
+import { AddDataSourceFormData } from "./types";
 
 interface WebsiteFieldsProps {
-    formData: {
-        name: string;
-        url: string;
-        [key: string]: any;
-    };
-    setFormData: (data: any) => void;
+    formData: AddDataSourceFormData;
+    setFormData: Dispatch<SetStateAction<AddDataSourceFormData>>;
 }
 
 export function WebsiteFields({ formData, setFormData }: WebsiteFieldsProps) {

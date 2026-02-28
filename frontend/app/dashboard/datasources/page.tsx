@@ -2,23 +2,20 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { format } from "date-fns";
 import {
-    Plus,
     Globe,
     FileText,
     MessageCircleQuestion,
     Trash2,
-    RefreshCw,
-    Edit2,
-    CheckCircle2,
-    AlertCircle,
-    Clock
+    Layers,
+    Building2,
+    Info,
+    Target,
+    User as UserIcon,
+    Edit2
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
     Card,
     CardContent,
@@ -32,70 +29,45 @@ import {
     TabsList,
     TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 
-import { WebsiteFields } from "./components/WebsiteFields";
-import { DocumentFields } from "./components/DocumentFields";
-import { FaqFields } from "./components/FaqFields";
-
-// Types
-type SourceType = "website" | "document" | "faq";
-type SourceStatus = "pending" | "processing" | "completed" | "failed";
-
-interface FAQ {
-    question: string;
-    answer: string;
-}
-
-interface DataSource {
-    _id: string;
-    name: string;
-    type: SourceType;
-    status: SourceStatus;
-    vectorCount: number;
-    sourceUrl?: string;
-    faqs?: FAQ[];
-    errorMessage?: string;
-    createdAt: string;
-    updatedAt: string;
-}
+import { DataSource, SourceType, AddDataSourceFormData } from "./components/types";
+import { DataSourceTable } from "./components/view-toggle/DataSourceTable";
+import { AddDataSourceModal } from "./components/AddDataSourceModal";
+import { EditDataSourceModal } from "./components/EditDataSourceModal";
+import { ViewDataSourceModal } from "./components/ViewDataSourceModal";
+import { EditCompanyContextModal } from "./components/EditCompanyContextModal";
 
 export default function DataSourcesPage() {
     const [sources, setSources] = useState<DataSource[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userData, setUserData] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<SourceType>("website");
+    const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+
+    // Existing FAQ names for autocomplete
+    const existingFaqNames = Array.from(new Set(sources.filter(s => s.type === "faq").map(s => s.name)));
 
     // Modals state
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [isEditContextModalOpen, setIsEditContextModalOpen] = useState(false);
     const [selectedSource, setSelectedSource] = useState<DataSource | null>(null);
 
     // Form states
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<AddDataSourceFormData>({
         name: "",
         url: "",
         question: "",
-        answer: ""
+        answer: "",
+        faqs: [{ question: "", answer: "" }]
     });
     const [file, setFile] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Extracted Text Editing State
+    const [extractedTextState, setExtractedTextState] = useState("");
+    const [isSavingText, setIsSavingText] = useState(false);
 
     // Fetch Sources
     const fetchSources = async () => {
@@ -114,8 +86,22 @@ export default function DataSourcesPage() {
         }
     };
 
+    const fetchUserData = async () => {
+        try {
+            const token = localStorage.getItem("token");
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            const res = await axios.get(`${apiUrl}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUserData(res.data);
+        } catch (error) {
+            console.error("Failed to fetch user data", error);
+        }
+    };
+
     useEffect(() => {
         fetchSources();
+        fetchUserData();
         // Set up polling for processing items
         const interval = setInterval(() => {
             setSources(prev => {
@@ -129,7 +115,7 @@ export default function DataSourcesPage() {
     }, []);
 
     const resetForm = () => {
-        setFormData({ name: "", url: "", question: "", answer: "" });
+        setFormData({ name: "", url: "", question: "", answer: "", faqs: [{ question: "", answer: "" }] });
         setFile(null);
     };
 
@@ -139,13 +125,20 @@ export default function DataSourcesPage() {
         setIsAddModalOpen(true);
     };
 
+    const handleOpenViewModal = (source: DataSource) => {
+        setSelectedSource(source);
+        setExtractedTextState(source.extractedText || "");
+        setIsViewModalOpen(true);
+    };
+
     const handleOpenEditModal = (source: DataSource) => {
         setSelectedSource(source);
         setFormData({
             name: source.name,
             url: source.sourceUrl || "",
-            question: source.type === 'faq' && source.faqs ? source.faqs[0]?.question : "",
-            answer: source.type === 'faq' && source.faqs ? source.faqs[0]?.answer : ""
+            question: "",
+            answer: "",
+            faqs: source.type === 'faq' && source.faqs && source.faqs.length > 0 ? source.faqs : [{ question: "", answer: "" }]
         });
         setFile(null);
         setIsEditModalOpen(true);
@@ -180,9 +173,8 @@ export default function DataSourcesPage() {
                 });
             } else if (activeTab === "faq") {
                 await api.post("/datasources/faq", {
-                    name: formData.name || formData.question.slice(0, 30),
-                    question: formData.question,
-                    answer: formData.answer
+                    name: formData.name || (formData.faqs && formData.faqs.length > 0 ? formData.faqs[0].question.slice(0, 30) : ""),
+                    faqs: formData.faqs
                 });
             }
 
@@ -218,7 +210,7 @@ export default function DataSourcesPage() {
             } else if (selectedSource.type === "faq") {
                 await api.put(`/datasources/faq/${selectedSource._id}`, {
                     name: formData.name,
-                    faqs: [{ question: formData.question, answer: formData.answer }]
+                    faqs: formData.faqs
                 });
             }
 
@@ -232,57 +224,201 @@ export default function DataSourcesPage() {
         }
     };
 
+    const handleSaveText = async () => {
+        if (!selectedSource) return;
+        setIsSavingText(true);
+        try {
+            await api.put(`/datasources/text/${selectedSource._id}`, { extractedText: extractedTextState });
+            setIsViewModalOpen(false);
+            fetchSources();
+        } catch (error) {
+            console.error("Failed to update text", error);
+        } finally {
+            setIsSavingText(false);
+        }
+    };
+
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to delete this data source? Its knowledge will be removed from your AI.")) return;
 
         try {
             await api.delete(`/datasources/${id}`);
+            setSelectedSourceIds(prev => prev.filter(selectedId => selectedId !== id));
             fetchSources();
         } catch (error) {
             console.error("Failed to delete source", error);
         }
     };
 
-    const getStatusBadge = (status: SourceStatus) => {
-        switch (status) {
-            case "completed": return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" /> Active</Badge>;
-            case "processing": return <Badge variant="secondary" className="text-primary bg-primary/20"><RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Processing</Badge>;
-            case "pending": return <Badge variant="outline" className="text-slate-600"><Clock className="w-3 h-3 mr-1" /> Queued</Badge>;
-            case "failed": return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Failed</Badge>;
+    const handleSelect = (id: string) => {
+        setSelectedSourceIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const getFilteredSources = (type: string) => {
+        if (type === "all") return sources;
+        return sources.filter(s => s.type === type);
+    };
+
+    const handleSelectAll = (type: string) => {
+        const filtered = getFilteredSources(type);
+        const allIds = filtered.map(s => s._id);
+
+        const allSelected = filtered.length > 0 &&
+            allIds.every(id => selectedSourceIds.includes(id));
+
+        if (allSelected) {
+            // Deselect all for this type
+            setSelectedSourceIds(prev => prev.filter(id => !allIds.includes(id)));
+        } else {
+            // Select all for this type
+            setSelectedSourceIds(prev => Array.from(new Set([...prev, ...allIds])));
         }
     };
 
-    const getTypeIcon = (type: SourceType) => {
-        switch (type) {
-            case "website": return <Globe className="w-4 h-4 text-blue-500" />;
-            case "document": return <FileText className="w-4 h-4 text-orange-500" />;
-            case "faq": return <MessageCircleQuestion className="w-4 h-4 text-purple-500" />;
+    const handleBulkDelete = async () => {
+        if (selectedSourceIds.length === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedSourceIds.length} selected data sources? Their knowledge will be removed from your AI.`)) return;
+
+        try {
+            await Promise.all(selectedSourceIds.map(id => api.delete(`/datasources/${id}`)));
+            setSelectedSourceIds([]);
+            fetchSources();
+        } catch (error) {
+            console.error("Failed to delete multiple sources", error);
         }
     };
+
 
     return (
         <div className="flex flex-col gap-6 p-6 w-full h-full">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground mb-1">Knowledge Sources</h1>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground mb-1">Data Sources</h1>
                     <p className="text-muted-foreground">Connect the data you want your AI agents to learn from.</p>
                 </div>
 
-                <div className="flex gap-2">
-                    <Button onClick={() => handleOpenAddModal("website")} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                        <Globe className="w-4 h-4 mr-2" />
-                        Add Website
-                    </Button>
-                    <Button onClick={() => handleOpenAddModal("document")} variant="secondary" className="bg-muted text-foreground hover:bg-muted/80">
-                        <FileText className="w-4 h-4 mr-2" />
-                        Upload Doc
-                    </Button>
-                    <Button onClick={() => handleOpenAddModal("faq")} variant="secondary" className="bg-muted text-foreground hover:bg-muted/80">
-                        <MessageCircleQuestion className="w-4 h-4 mr-2" />
-                        Add FAQ
-                    </Button>
+                <div className="flex gap-4 items-center">
+                    {selectedSourceIds.length > 0 && (
+                        <Button
+                            variant="destructive"
+                            onClick={handleBulkDelete}
+                            className="bg-red-500 hover:bg-red-600 text-white"
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Selected ({selectedSourceIds.length})
+                        </Button>
+                    )}
+
+                    <div className="flex gap-2">
+                        <Button onClick={() => handleOpenAddModal("website")} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                            <Globe className="w-4 h-4 mr-2" />
+                            Add Website
+                        </Button>
+                        <Button onClick={() => handleOpenAddModal("document")} variant="secondary" className="bg-muted text-foreground hover:bg-muted/80">
+                            <FileText className="w-4 h-4 mr-2" />
+                            Upload Doc
+                        </Button>
+                        <Button onClick={() => handleOpenAddModal("faq")} variant="secondary" className="bg-muted text-foreground hover:bg-muted/80">
+                            <MessageCircleQuestion className="w-4 h-4 mr-2" />
+                            Add FAQ
+                        </Button>
+                    </div>
                 </div>
             </div>
+
+            {userData && (
+                <Card className="border-border bg-card text-foreground">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div className="space-y-1.5">
+                            <CardTitle className="flex items-center gap-2 text-xl font-semibold">
+                                <Building2 className="w-5 h-5 text-primary" />
+                                Company Profile
+                            </CardTitle>
+                            <CardDescription>
+                                Core context and configuration for your AI agents.
+                            </CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => setIsEditContextModalOpen(true)}>
+                            <Edit2 className="w-4 h-4 mr-2" />
+                            Edit Profile
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-col gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 border border-border rounded-xl bg-muted/10">
+                                <div className="space-y-1.5">
+                                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <Building2 className="w-4 h-4" /> Company
+                                    </p>
+                                    <p className="font-semibold text-foreground text-base">{userData.companyName || "Not specified"}</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <Info className="w-4 h-4" /> Industry
+                                    </p>
+                                    <p className="font-semibold text-foreground text-base">{userData.industry || "Not specified"}</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                        <Globe className="w-4 h-4" /> Website
+                                    </p>
+                                    <div className="font-semibold text-foreground text-base">
+                                        {userData.websiteUrl ? (
+                                            <a href={userData.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                                {userData.websiteUrl}
+                                            </a>
+                                        ) : "Not specified"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="p-5 border border-border rounded-xl bg-muted/5 space-y-5">
+                                    <h4 className="font-semibold flex items-center gap-2 text-foreground text-base">
+                                        <UserIcon className="w-4 h-4 text-primary" /> Agent Persona
+                                    </h4>
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium text-muted-foreground">Personality</p>
+                                        <div className="flex">
+                                            <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md text-sm font-medium">
+                                                {userData.chatbotPersonality || "Not specified"}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 pt-3 border-t border-border/50">
+                                        <p className="text-sm font-medium text-muted-foreground">Languages</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {userData.supportedLanguages?.length > 0 ? (
+                                                userData.supportedLanguages.map((l: string, i: number) => (
+                                                    <span key={i} className="px-3 py-1 bg-secondary border border-border text-secondary-foreground rounded-md text-sm font-medium">{l}</span>
+                                                ))
+                                            ) : <span className="text-sm text-muted-foreground">None specified</span>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 border border-border rounded-xl bg-muted/5 space-y-5">
+                                    <h4 className="font-semibold flex items-center gap-2 text-foreground text-base">
+                                        <Target className="w-4 h-4 text-primary" /> Supported Capabilities
+                                    </h4>
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium text-muted-foreground">Assigned Tasks</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {userData.chatbotPurpose?.length > 0 ? (
+                                                userData.chatbotPurpose.map((p: string, i: number) => (
+                                                    <span key={i} className="px-3 py-1 bg-card text-foreground border border-border rounded-md text-sm font-medium shadow-sm">{p}</span>
+                                                ))
+                                            ) : <span className="text-sm text-muted-foreground">None specified</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <Card className="border-border bg-card text-foreground">
                 <CardHeader>
@@ -290,161 +426,122 @@ export default function DataSourcesPage() {
                     <CardDescription className="text-muted-foreground">Manage all existing data context for your chatbots.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader className="border-border">
-                            <TableRow className="border-b border-border hover:bg-muted/50">
-                                <TableHead className="text-muted-foreground font-medium">Name</TableHead>
-                                <TableHead className="text-muted-foreground font-medium">Type</TableHead>
-                                <TableHead className="text-muted-foreground font-medium">Status</TableHead>
-                                <TableHead className="text-muted-foreground font-medium whitespace-nowrap">Vectors</TableHead>
-                                <TableHead className="text-muted-foreground font-medium">Added</TableHead>
-                                <TableHead className="text-muted-foreground font-medium text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading && sources.length === 0 ? (
-                                <TableRow className="border-b border-border">
-                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                        Loading your data sources...
-                                    </TableCell>
-                                </TableRow>
-                            ) : sources.length === 0 ? (
-                                <TableRow className="border-b border-border">
-                                    <TableCell colSpan={6} className="text-center py-12">
-                                        <div className="flex flex-col items-center justify-center text-muted-foreground">
-                                            <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
-                                                <FileText className="w-6 h-6 text-muted-foreground" />
-                                            </div>
-                                            <p className="font-medium text-muted-foreground">No data sources yet</p>
-                                            <p className="text-sm mt-1 max-w-sm text-center">Your AI doesn't have any custom knowledge. Add a website, document, or FAQ to get started.</p>
-                                            <Button onClick={() => handleOpenAddModal("website")} className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90">Get Started</Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                sources.map((source) => (
-                                    <TableRow key={source._id} className="border-b border-border border-opacity-50 hover:bg-muted/50">
-                                        <TableCell className="font-medium">
-                                            <div className="flex flex-col">
-                                                <span>{source.name}</span>
-                                                {source.type === 'website' && <span className="text-xs text-muted-foreground truncate max-w-xs">{source.sourceUrl}</span>}
-                                                {source.status === 'failed' && <span className="text-xs text-red-400 truncate max-w-xs">{source.errorMessage}</span>}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center capitalize text-muted-foreground">
-                                                {getTypeIcon(source.type)}
-                                                <span className="ml-2">{source.type}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{getStatusBadge(source.status)}</TableCell>
-                                        <TableCell className="text-muted-foreground">{source.vectorCount.toLocaleString()}</TableCell>
-                                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                                            {format(new Date(source.createdAt), "MMM d, yyyy")}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleOpenEditModal(source)}
-                                                    className="text-muted-foreground hover:text-foreground hover:bg-muted"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleDelete(source._id)}
-                                                    className="text-muted-foreground hover:text-red-400 hover:bg-muted hover:bg-opacity-50"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
+                    <Tabs defaultValue="all" className="w-full">
+                        <TabsList className="mb-4 grid w-full grid-cols-4 bg-muted/50 border border-border">
+                            <TabsTrigger value="all" className="data-[state=active]:bg-background data-[state=active]:text-foreground shadow-sm">
+                                <Layers className="w-4 h-4 mr-2" />
+                                All Sources
+                            </TabsTrigger>
+                            <TabsTrigger value="website" className="data-[state=active]:bg-background data-[state=active]:text-foreground shadow-sm">
+                                <Globe className="w-4 h-4 mr-2 text-blue-500" />
+                                Websites
+                            </TabsTrigger>
+                            <TabsTrigger value="document" className="data-[state=active]:bg-background data-[state=active]:text-foreground shadow-sm">
+                                <FileText className="w-4 h-4 mr-2 text-orange-500" />
+                                Upload Docs
+                            </TabsTrigger>
+                            <TabsTrigger value="faq" className="data-[state=active]:bg-background data-[state=active]:text-foreground shadow-sm">
+                                <MessageCircleQuestion className="w-4 h-4 mr-2 text-purple-500" />
+                                FAQs
+                            </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="all" className="mt-0 border rounded-md border-border">
+                            <DataSourceTable
+                                filteredSources={getFilteredSources("all")}
+                                loading={loading}
+                                handleOpenAddModal={handleOpenAddModal}
+                                handleOpenViewModal={handleOpenViewModal}
+                                handleOpenEditModal={handleOpenEditModal}
+                                handleDelete={handleDelete}
+                                selectedIds={selectedSourceIds}
+                                onSelect={handleSelect}
+                                onSelectAll={() => handleSelectAll("all")}
+                            />
+                        </TabsContent>
+                        <TabsContent value="website" className="mt-0 border rounded-md border-border">
+                            <DataSourceTable
+                                filteredSources={getFilteredSources("website")}
+                                loading={loading}
+                                handleOpenAddModal={handleOpenAddModal}
+                                handleOpenViewModal={handleOpenViewModal}
+                                handleOpenEditModal={handleOpenEditModal}
+                                handleDelete={handleDelete}
+                                selectedIds={selectedSourceIds}
+                                onSelect={handleSelect}
+                                onSelectAll={() => handleSelectAll("website")}
+                            />
+                        </TabsContent>
+                        <TabsContent value="document" className="mt-0 border rounded-md border-border">
+                            <DataSourceTable
+                                filteredSources={getFilteredSources("document")}
+                                loading={loading}
+                                handleOpenAddModal={handleOpenAddModal}
+                                handleOpenViewModal={handleOpenViewModal}
+                                handleOpenEditModal={handleOpenEditModal}
+                                handleDelete={handleDelete}
+                                selectedIds={selectedSourceIds}
+                                onSelect={handleSelect}
+                                onSelectAll={() => handleSelectAll("document")}
+                            />
+                        </TabsContent>
+                        <TabsContent value="faq" className="mt-0 border rounded-md border-border">
+                            <DataSourceTable
+                                filteredSources={getFilteredSources("faq")}
+                                loading={loading}
+                                handleOpenAddModal={handleOpenAddModal}
+                                handleOpenViewModal={handleOpenViewModal}
+                                handleOpenEditModal={handleOpenEditModal}
+                                handleDelete={handleDelete}
+                                selectedIds={selectedSourceIds}
+                                onSelect={handleSelect}
+                                onSelectAll={() => handleSelectAll("faq")}
+                            />
+                        </TabsContent>
+                    </Tabs>
                 </CardContent>
             </Card>
 
-            {/* ADD MODAL */}
-            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-background text-foreground border-border">
-                    <DialogHeader>
-                        <DialogTitle>Add Data Source</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                            Inject new knowledge into your AI agent's Brain.
-                        </DialogDescription>
-                    </DialogHeader>
+            <AddDataSourceModal
+                isOpen={isAddModalOpen}
+                setIsOpen={setIsAddModalOpen}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                formData={formData}
+                setFormData={setFormData}
+                setFile={setFile}
+                handleAddSubmit={handleAddSubmit}
+                isSubmitting={isSubmitting}
+                existingFaqNames={existingFaqNames}
+            />
 
-                    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SourceType)} className="mt-4">
-                        <TabsList className="grid w-full grid-cols-3 bg-muted/50 border border-border">
-                            <TabsTrigger value="website" className="data-[state=active]:bg-muted data-[state=active]:text-foreground">Website</TabsTrigger>
-                            <TabsTrigger value="document" className="data-[state=active]:bg-muted data-[state=active]:text-foreground">Document</TabsTrigger>
-                            <TabsTrigger value="faq" className="data-[state=active]:bg-muted data-[state=active]:text-foreground">FAQ</TabsTrigger>
-                        </TabsList>
+            <EditDataSourceModal
+                isOpen={isEditModalOpen}
+                setIsOpen={setIsEditModalOpen}
+                selectedSource={selectedSource}
+                formData={formData}
+                setFormData={setFormData}
+                setFile={setFile}
+                handleEditSubmit={handleEditSubmit}
+                isSubmitting={isSubmitting}
+            />
 
-                        <form onSubmit={handleAddSubmit} className="mt-6 space-y-4">
-                            {activeTab === "website" && (
-                                <WebsiteFields formData={formData} setFormData={setFormData} />
-                            )}
+            <ViewDataSourceModal
+                isOpen={isViewModalOpen}
+                setIsOpen={setIsViewModalOpen}
+                selectedSource={selectedSource}
+                extractedTextState={extractedTextState}
+                setExtractedTextState={setExtractedTextState}
+                handleSaveText={handleSaveText}
+                isSavingText={isSavingText}
+            />
 
-                            {activeTab === "document" && (
-                                <DocumentFields formData={formData} setFormData={setFormData} setFile={setFile} isEditMode={false} />
-                            )}
-
-                            {activeTab === "faq" && (
-                                <FaqFields formData={formData} setFormData={setFormData} />
-                            )}
-
-                            <DialogFooter className="pt-4">
-                                <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)} className="border-border bg-transparent hover:bg-muted text-muted-foreground">Cancel</Button>
-                                <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                                    {isSubmitting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                    Save & Process
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </Tabs>
-                </DialogContent>
-            </Dialog>
-
-            {/* EDIT MODAL */}
-            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-background text-foreground border-border">
-                    <DialogHeader>
-                        <DialogTitle>Edit Data Source</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
-                            Update {selectedSource?.name}. Changing content will re-process the data.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <form onSubmit={handleEditSubmit} className="mt-4 space-y-4">
-                        {selectedSource?.type === "website" && (
-                            <WebsiteFields formData={formData} setFormData={setFormData} />
-                        )}
-
-                        {selectedSource?.type === "document" && (
-                            <DocumentFields formData={formData} setFormData={setFormData} setFile={setFile} isEditMode={true} />
-                        )}
-
-                        {selectedSource?.type === "faq" && (
-                            <FaqFields formData={formData} setFormData={setFormData} />
-                        )}
-
-                        <DialogFooter className="pt-4">
-                            <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)} className="border-border bg-transparent hover:bg-muted text-muted-foreground">Cancel</Button>
-                            <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                                {isSubmitting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Update Data
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-        </div>
+            <EditCompanyContextModal
+                isOpen={isEditContextModalOpen}
+                setIsOpen={setIsEditContextModalOpen}
+                userData={userData}
+                fetchUserData={fetchUserData}
+            />
+        </div >
     );
 }
