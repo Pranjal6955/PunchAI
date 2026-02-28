@@ -1,5 +1,6 @@
 import express, { Application } from "express";
 import cors from "cors";
+import path from "path";
 import authRoutes from "./routes/authRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 import dataSourceRoutes from "./routes/dataSourceRoutes";
@@ -9,6 +10,9 @@ const app: Application = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static uploads
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Routes
 app.use("/api/auth", authRoutes);

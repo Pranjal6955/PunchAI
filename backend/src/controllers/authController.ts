@@ -40,6 +40,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
                 fullName: user.fullName,
                 email: user.email,
                 isOnboarded: user.isOnboarded,
+                profileImage: user.profileImage,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -62,6 +63,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
                 fullName: user.fullName,
                 email: user.email,
                 isOnboarded: user.isOnboarded,
+                profileImage: user.profileImage,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -90,6 +92,7 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
                 chatbotPurpose: user.chatbotPurpose,
                 supportedLanguages: user.supportedLanguages,
                 knowledgeBaseSetup: user.knowledgeBaseSetup,
+                profileImage: user.profileImage,
             });
             return;
         }
@@ -99,3 +102,64 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
         res.status(500).json({ message: error.message });
     }
 };
+
+export const uploadProfileImage = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user._id;
+
+        if (!req.file) {
+            res.status(400).json({ message: "No image file provided" });
+            return;
+        }
+
+        const profileImageUrl = `/uploads/profiles/${req.file.filename}`;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { profileImage: profileImageUrl },
+            { new: true }
+        ).select("-password");
+
+        if (updatedUser) {
+            res.json({
+                message: "Profile image updated successfully",
+                profileImage: updatedUser.profileImage,
+            });
+        } else {
+            res.status(404).json({ message: "User not found" });
+        }
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const updateProfile = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user = await User.findById((req as any).user._id);
+
+        if (user) {
+            user.fullName = req.body.fullName || user.fullName;
+
+            if (req.body.password) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash(req.body.password, salt);
+            }
+
+            const updatedUser = await user.save();
+
+            res.json({
+                _id: updatedUser._id,
+                fullName: updatedUser.fullName,
+                email: updatedUser.email,
+                isOnboarded: updatedUser.isOnboarded,
+                profileImage: updatedUser.profileImage,
+                token: generateToken(updatedUser._id.toString()),
+            });
+        } else {
+            res.status(404).json({ message: "User not found" });
+        }
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+

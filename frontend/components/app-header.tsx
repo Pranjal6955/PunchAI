@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/avatar"
 
 export function AppHeader() {
-    const [user, setUser] = useState<{ fullName: string, email: string, isOnboarded?: boolean, onboardingStep?: number } | null>(null)
+    const [user, setUser] = useState<{ fullName: string, email: string, profileImage?: string, isOnboarded?: boolean, onboardingStep?: number } | null>(null)
     const [onboardingStep, setOnboardingStep] = useState<number>(1)
     const router = useRouter()
     const pathname = usePathname()
@@ -193,7 +193,10 @@ export function AppHeader() {
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="relative h-10 w-auto flex items-center gap-2 rounded-20px p-1 pr-3 hover:bg-muted focus-visible:ring-0 focus-visible:ring-offset-0">
                             <Avatar className="h-8 w-8">
-                                <AvatarImage src="/placeholder-user.jpg" alt="User Avatar" />
+                                <AvatarImage
+                                    src={user?.profileImage ? (user.profileImage.startsWith('http') ? user.profileImage : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000'}${user.profileImage}`) : "/placeholder-user.jpg"}
+                                    alt="User Avatar"
+                                />
                                 <AvatarFallback>{user?.fullName?.[0]?.toUpperCase() || "U"}</AvatarFallback>
                             </Avatar>
                             <span className="hidden md:inline-flex text-sm font-medium">

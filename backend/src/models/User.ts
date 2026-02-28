@@ -18,6 +18,9 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        profileImage: {
+            type: String,
+        },
         isOnboarded: {
             type: Boolean,
             default: false,
