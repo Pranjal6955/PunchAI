@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import {
     LayoutDashboard,
     MessageSquare,
@@ -31,7 +32,6 @@ const navMain = [
         title: "Overview",
         url: "/dashboard",
         icon: LayoutDashboard,
-        isActive: true,
     },
     {
         title: "Chat Logs",
@@ -69,6 +69,8 @@ const navSecondary = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+    const pathname = usePathname()
+
     return (
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
@@ -95,7 +97,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenu>
                             {navMain.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild isActive={item.isActive} tooltip={item.title}>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={pathname === item.url}
+                                        tooltip={item.title}
+                                    >
                                         <Link href={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>
@@ -111,7 +117,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenu>
                             {navSecondary.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild size="sm" tooltip={item.title}>
+                                    <SidebarMenuButton
+                                        asChild
+                                        size="sm"
+                                        isActive={pathname === item.url}
+                                        tooltip={item.title}
+                                    >
                                         <Link href={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>

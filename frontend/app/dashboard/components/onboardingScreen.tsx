@@ -36,7 +36,8 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
     const saveToDatabase = useCallback(async (currentData: typeof formData, stepToSave: number, isFinal: boolean = false) => {
         try {
             const token = localStorage.getItem("token");
-            await fetch("http://localhost:5000/api/onboarding", {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            await fetch(`${API_URL}/onboarding`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -63,7 +64,8 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
         const fetchExistingData = async () => {
             try {
                 const token = localStorage.getItem("token");
-                const res = await fetch("http://localhost:5000/api/auth/me", {
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+                const res = await fetch(`${API_URL}/auth/me`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.ok) {
@@ -163,7 +165,8 @@ export default function OnboardingScreen({ onDismiss }: OnboardingScreenProps) {
 
             // Fetch updated user to update local storage
             const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:5000/api/auth/me", {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+            const res = await fetch(`${API_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
