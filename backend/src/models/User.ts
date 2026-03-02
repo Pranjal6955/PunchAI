@@ -50,6 +50,11 @@ const userSchema = new mongoose.Schema(
             type: Number,
             default: 1,
         },
+        apiKey: {
+            type: String,
+            unique: true,
+            sparse: true,
+        }
     },
     {
         timestamps: true,

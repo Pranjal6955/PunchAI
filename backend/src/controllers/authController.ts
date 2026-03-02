@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
+import apiKeyService from "../services/apiKeyService";
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -32,6 +33,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
             fullName,
             email,
             password: hashedPassword,
+            apiKey: apiKeyService.generateKey(),
         });
 
         if (user) {
@@ -41,6 +43,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
                 email: user.email,
                 isOnboarded: user.isOnboarded,
                 profileImage: user.profileImage,
+                apiKey: user.apiKey,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -58,12 +61,19 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         const user = await User.findOne({ email });
 
         if (user && (await bcrypt.compare(password, user.password))) {
+            // Generate API key if missing (for legacy users)
+            if (!user.apiKey) {
+                user.apiKey = apiKeyService.generateKey();
+                await user.save();
+            }
+
             res.json({
                 _id: user._id,
                 fullName: user.fullName,
                 email: user.email,
                 isOnboarded: user.isOnboarded,
                 profileImage: user.profileImage,
+                apiKey: user.apiKey,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -93,6 +103,7 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
                 supportedLanguages: user.supportedLanguages,
                 knowledgeBaseSetup: user.knowledgeBaseSetup,
                 profileImage: user.profileImage,
+                apiKey: user.apiKey,
             });
             return;
         }
