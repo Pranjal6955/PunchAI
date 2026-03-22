@@ -1,14 +1,16 @@
 import express from "express";
-import { handleChatMessage, getChatLogs, getChatById } from "../controllers/chatController";
+import { handleChatMessage, handleChatStream, getChatLogs, getChatById } from "../controllers/chatController";
 import { verifyApiKey } from "../middleware/apiKeyMiddleware";
 import { protect } from "../middleware/authMiddleware";
+import { chatLimiter } from "../middleware/rateLimitMiddleware";
 
 const router = express.Router();
 
-// Public Chat API (requires API Key)
-router.post("/", verifyApiKey, handleChatMessage);
+// ─── Public: Chat API (API key required + rate limited) ───────────────────
+router.post("/", chatLimiter, verifyApiKey, handleChatMessage);
+router.post("/stream", chatLimiter, verifyApiKey, handleChatStream);
 
-// Admin Dashboard Chat APIs (requires JWT Auth)
+// ─── Protected: Dashboard / Admin (JWT required) ──────────────────────────
 router.get("/logs", protect, getChatLogs);
 router.get("/:chatId", protect, getChatById);
 

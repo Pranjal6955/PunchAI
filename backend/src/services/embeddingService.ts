@@ -11,7 +11,26 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 /**
- * Generate embeddings using OpenAI as primary, falling back to Gemini
+ * Expected embedding dimension — MUST match the Pinecone index configuration.
+ * OpenAI text-embedding-3-small: 1024 (via `dimensions` param).
+ * Gemini embedding-001: 3072 → truncated to 1024.
+ * If you change the index dimension, update this constant.
+ */
+const EXPECTED_DIMENSION = 1024;
+
+const validateDimension = (embedding: number[], provider: string): void => {
+    if (embedding.length !== EXPECTED_DIMENSION) {
+        throw new Error(
+            `[EmbeddingService] ${provider} returned ${embedding.length} dims ` +
+            `but Pinecone index expects ${EXPECTED_DIMENSION}. ` +
+            `Update EXPECTED_DIMENSION or reconfigure the index.`
+        );
+    }
+};
+
+/**
+ * Generate embeddings using OpenAI as primary, falling back to Gemini.
+ * Validates dimensions after every call to catch index mismatches early.
  */
 export const generateEmbedding = async (text: string): Promise<number[]> => {
     try {
@@ -20,10 +39,12 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
         const response = await openai.embeddings.create({
             model: "text-embedding-3-small",
             input: text,
-            dimensions: 1024,
+            dimensions: EXPECTED_DIMENSION,
         });
 
-        return response.data[0].embedding;
+        const embedding = response.data[0].embedding;
+        validateDimension(embedding, "OpenAI text-embedding-3-small");
+        return embedding;
     } catch (openaiError: any) {
         console.warn(`OpenAI Embedding failed (${openaiError.message}). Falling back to Gemini...`);
 
@@ -33,9 +54,10 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
             const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
             const result = await model.embedContent(text);
 
-            // Pinecone index is 1024 dimensions, but gemini-embedding-001 returns 3072.
-            // Truncate the values to fit the index size. 
-            return result.embedding.values.slice(0, 1024);
+            // Gemini returns 3072 dims — truncate to match the Pinecone index
+            const embedding = result.embedding.values.slice(0, EXPECTED_DIMENSION);
+            validateDimension(embedding, "Gemini gemini-embedding-001 (truncated)");
+            return embedding;
         } catch (geminiError: any) {
             console.error(`Gemini Embedding fallback also failed: ${geminiError.message}`);
             throw new Error("Failed to generate embeddings from both Primary and Backup services.");

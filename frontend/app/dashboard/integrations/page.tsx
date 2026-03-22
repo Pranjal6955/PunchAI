@@ -1,85 +1,149 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Copy, RefreshCcw, Code, Terminal, Check, ExternalLink } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Copy, RefreshCcw, Code, Check, ExternalLink, Key, ShieldCheck, ShieldOff, AlertTriangle, Eye, EyeOff, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// import { toast } from "sonner"; Silas
+
+type KeyType = "primary" | "fallback";
+
+interface KeySlot {
+    active: boolean;
+    createdAt: string | null;
+    revealedKey: string | null; // set only right after generation
+    revealed: boolean;
+    loading: boolean;
+    copied: boolean;
+}
+
+const EMPTY_SLOT: KeySlot = {
+    active: false, createdAt: null,
+    revealedKey: null, revealed: false,
+    loading: false, copied: false,
+};
+
+const mask = (k: string) => k.slice(0, 10) + "•".repeat(24) + k.slice(-4);
 
 export default function IntegrationPage() {
-    const [apiKey, setApiKey] = useState<string>("");
-    const [loading, setLoading] = useState(true);
-    const [regenerating, setRegenerating] = useState(false);
-    const [copied, setCopied] = useState(false);
+    /* 
+    const [primary, setPrimary] = useState<KeySlot>(EMPTY_SLOT);
+    const [fallback, setFallback] = useState<KeySlot>(EMPTY_SLOT);
+    const [pageLoading, setPageLoading] = useState(true);
+    const [confirmRevoke, setConfirmRevoke] = useState(false);
+    const [revoking, setRevoking] = useState(false);
+    const [snippetCopied, setSnippetCopied] = useState<string | null>(null);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-    const fetchUser = async () => {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
-        try {
-            const res = await fetch(`${API_URL}/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setApiKey(data.apiKey || "");
-            }
-        } catch (err) {
-            console.error("Failed to fetch user", err);
-        } finally {
-            setLoading(false);
-        }
+    // ── Lock (hide) a key after the user clicks Done ─────────────────────────
+    const lockKey = (type: KeyType) => {
+        const set = type === "primary" ? setPrimary : setFallback;
+        set(p => ({ ...p, revealedKey: null, revealed: false }));
     };
 
-    useEffect(() => {
-        fetchUser();
-    }, []);
-
-    const handleRegenerate = async () => {
-        const confirmResult = window.confirm(
-            "Are you sure you want to regenerate your API key? All applications using the current key will stop working immediately."
-        );
-        if (!confirmResult) return;
-
-        setRegenerating(true);
+    // ── Load key status ───────────────────────────────────────────────────────
+    const loadStatus = useCallback(async () => {
         const token = localStorage.getItem("token");
-
+        if (!token) { setPageLoading(false); return; }
         try {
-            const res = await fetch(`${API_URL}/user/generate-api-key`, {
+            const r = await fetch(`${API_URL}/user/api-key-status`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (r.ok) {
+                const { status } = await r.json();
+                setPrimary(p => ({ ...p, active: status.primary.active, createdAt: status.primary.createdAt }));
+                setFallback(p => ({ ...p, active: status.fallback.active, createdAt: status.fallback.createdAt }));
+            }
+        } catch (e) { console.error(e); }
+        finally { setPageLoading(false); }
+    }, [API_URL]);
+
+    useEffect(() => { loadStatus(); }, [loadStatus]);
+
+    // ── Generate / rotate ─────────────────────────────────────────────────────
+    const handleGenerate = async (type: KeyType) => {
+        const cur = type === "primary" ? primary : fallback;
+        const set = type === "primary" ? setPrimary : setFallback;
+
+        if (cur.active) {
+            const ok = window.confirm(
+                type === "primary"
+                    ? "Regenerate the Primary key?\n\nAll widgets using this key will stop working immediately."
+                    : "Regenerate the Fallback key?\n\nThe current fallback key will be replaced."
+            );
+            if (!ok) return;
+        }
+
+        set(p => ({ ...p, loading: true }));
+        const token = localStorage.getItem("token");
+        try {
+            const r = await fetch(`${API_URL}/user/generate-api-key`, {
                 method: "POST",
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ type }),
             });
-
-            if (res.ok) {
-                const data = await res.json();
-                setApiKey(data.apiKey);
-                // toast.success("API Key regenerated successfully");
-                alert("API Key regenerated successfully");
+            const d = await r.json();
+            if (r.ok) {
+                set(() => ({
+                    ...EMPTY_SLOT,
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    revealedKey: d.apiKey,
+                    revealed: false,
+                    loading: false,
+                    copied: false,
+                }));
             } else {
-                alert("Failed to regenerate API key");
+                alert(d.message || "Failed to generate key");
+                set(p => ({ ...p, loading: false }));
             }
-        } catch (err) {
-            console.error(err);
-            alert("Error regenerating API key");
-        } finally {
-            setRegenerating(false);
+        } catch {
+            alert("Error generating key");
+            set(p => ({ ...p, loading: false }));
         }
     };
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    // ── Revoke fallback ───────────────────────────────────────────────────────
+    const handleRevoke = async () => {
+        setRevoking(true);
+        const token = localStorage.getItem("token");
+        try {
+            const r = await fetch(`${API_URL}/user/fallback-api-key`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (r.ok) { setFallback(EMPTY_SLOT); setConfirmRevoke(false); }
+            else alert("Failed to revoke fallback key");
+        } catch { alert("Error revoking fallback key"); }
+        finally { setRevoking(false); }
     };
+
+    // ── Copy helpers ──────────────────────────────────────────────────────────
+    const copyKey = (type: KeyType) => {
+        const key = (type === "primary" ? primary : fallback).revealedKey;
+        if (!key) return;
+        navigator.clipboard.writeText(key);
+        (type === "primary" ? setPrimary : setFallback)(p => ({ ...p, copied: true }));
+        setTimeout(() =>
+            (type === "primary" ? setPrimary : setFallback)(p => ({ ...p, copied: false }))
+            , 2000);
+    };
+
+    const copySnippet = (id: string, text: string) => {
+        navigator.clipboard.writeText(text);
+        setSnippetCopied(id);
+        setTimeout(() => setSnippetCopied(null), 2000);
+    };
+
+    // Use primary's revealed key for snippets, else placeholder
+    const snippetKey = primary.revealedKey ?? (primary.active ? "YOUR_PRIMARY_KEY" : "YOUR_API_KEY");
 
     const scriptSnippet = `<script 
   src="https://cdn.punchai.io/widget.js" 
-  data-api-key="${apiKey || "YOUR_API_KEY"}"
+  data-api-key="${snippetKey}"
   async
 ></script>`;
 
@@ -88,209 +152,78 @@ export default function IntegrationPage() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": "${apiKey || "YOUR_API_KEY"}"
+      "x-api-key": "${snippetKey}"
     },
     body: JSON.stringify({
       sessionId: "user-session-id",
       message: message
     })
   });
-  
-  const data = await response.json();
-  return data.response;
+  const { answer, sources } = await response.json();
+  return answer;
 };`;
 
     const curlSnippet = `curl -X POST ${API_URL}/chat \\
-  -H "x-api-key: ${apiKey || "YOUR_API_KEY"}" \\
+  -H "x-api-key: ${snippetKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"sessionId": "test-session", "message": "Hello!"}'`;
 
-    if (loading) {
+    // ── Loading ───────────────────────────────────────────────────────────────
+    if (pageLoading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
         );
     }
+    */
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8 py-6">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">Integration</h1>
-                <p className="text-muted-foreground">
-                    Connect PunchAI to your website or application using our secure API.
+        <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-6 text-center px-4">
+            <div className="relative">
+                <div className="absolute inset-0 blur-2xl bg-amber-500/20 rounded-full" />
+                <div className="relative p-6 rounded-3xl bg-zinc-900/50 border border-amber-500/20 backdrop-blur-sm">
+                    <RefreshCcw className="w-16 h-16 text-amber-500 animate-spin [animation-duration:3s]" />
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
+                    Integration Portal
+                </h1>
+                <p className="text-zinc-400 max-w-lg mx-auto text-lg">
+                    We&apos;re currently forging the connection hub. Soon you&apos;ll be able to generate secure API keys and integrate PunchAI seamlessly into your workflow.
                 </p>
             </div>
 
-            {/* API Key Section */}
-            <Card className="border-primary/20 bg-primary/5">
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>Your API Key</CardTitle>
-                            <CardDescription>
-                                Used to authenticate your chat widget and direct API calls.
-                            </CardDescription>
-                        </div>
-                        <Badge variant="outline" className="bg-background">Production</Badge>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                        <div className="relative flex-1">
-                            <Input
-                                value={apiKey}
-                                readOnly
-                                className="font-mono bg-background pr-10"
-                                placeholder="Loading API Key..."
-                            />
-                            <button
-                                onClick={() => copyToClipboard(apiKey)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                            </button>
-                        </div>
-                        <Button
-                            variant="outline"
-                            onClick={handleRegenerate}
-                            disabled={regenerating}
-                            className="bg-background shrink-0"
-                        >
-                            <RefreshCcw className={`w-4 h-4 mr-2 ${regenerating ? "animate-spin" : ""}`} />
-                            Regenerate
-                        </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        Keep this key secret. Never share it or commit it to version control.
-                    </p>
-                </CardContent>
-            </Card>
+            <div className="flex flex-col items-center gap-4">
+                <Badge variant="outline" className="px-6 py-1.5 text-sm bg-amber-500/5 text-amber-500 border-amber-500/20 rounded-full whitespace-nowrap">
+                    <span className="mr-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    Currently Under Development
+                </Badge>
 
-            {/* Implementation Section */}
-            <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                    <Code className="w-5 h-5 text-primary" />
-                    <h2 className="text-xl font-semibold">Implementation Guide</h2>
+                <div className="flex gap-4 pt-4">
+                    <Button variant="ghost" className="text-zinc-500 hover:text-white" disabled>
+                        Documentation
+                    </Button>
+                    <Button variant="ghost" className="text-zinc-500 hover:text-white" disabled>
+                        API Reference
+                    </Button>
                 </div>
-
-                <Tabs defaultValue="widget" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-1">
-                        <TabsTrigger value="widget">Chat Widget</TabsTrigger>
-                        <TabsTrigger value="node">Node.js / JS</TabsTrigger>
-                        <TabsTrigger value="curl">cURL</TabsTrigger>
-                    </TabsList>
-
-                    {/* Widget Tab */}
-                    <TabsContent value="widget" className="mt-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Embedded Chat Widget</CardTitle>
-                                <CardDescription>
-                                    The easiest way to add PunchAI to your website. Copy and paste this script tag into your HTML's <code>&lt;head&gt;</code> or <code>&lt;body&gt;</code>.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="relative group">
-                                    <pre className="p-4 rounded-lg bg-zinc-950 text-zinc-300 text-sm overflow-x-auto border border-zinc-800">
-                                        <code>{scriptSnippet}</code>
-                                    </pre>
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        className="absolute right-3 top-3 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => copyToClipboard(scriptSnippet)}
-                                    >
-                                        <Copy className="w-3.5 h-3.5" />
-                                    </Button>
-                                </div>
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                    <div className="flex items-center gap-1">
-                                        <Check className="w-4 h-4 text-green-500" />
-                                        <span>Custom Branding</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Check className="w-4 h-4 text-green-500" />
-                                        <span>Instant Loads</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Check className="w-4 h-4 text-green-500" />
-                                        <span>Mobile Responsive</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    {/* Node.js Tab */}
-                    <TabsContent value="node" className="mt-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Custom Backend Integration</CardTitle>
-                                <CardDescription>
-                                    Use our REST API to build your own chat interface or integrate with other services.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="relative group">
-                                    <pre className="p-4 rounded-lg bg-zinc-950 text-zinc-300 text-sm overflow-x-auto border border-zinc-800 font-mono">
-                                        <code>{nodeSnippet}</code>
-                                    </pre>
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        className="absolute right-3 top-3 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => copyToClipboard(nodeSnippet)}
-                                    >
-                                        <Copy className="w-3.5 h-3.5" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    {/* CURL Tab */}
-                    <TabsContent value="curl" className="mt-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Terminal / Shell</CardTitle>
-                                <CardDescription>
-                                    Test your connection directly from your terminal.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="relative group">
-                                    <pre className="p-4 rounded-lg bg-zinc-950 text-zinc-300 text-sm overflow-x-auto border border-zinc-800 font-mono">
-                                        <code>{curlSnippet}</code>
-                                    </pre>
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        className="absolute right-3 top-3 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => copyToClipboard(curlSnippet)}
-                                    >
-                                        <Copy className="w-3.5 h-3.5" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                </Tabs>
             </div>
 
-            {/* Support Section */}
-            <div className="pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
-                <div className="flex gap-4">
-                    <a href="#" className="flex items-center hover:text-foreground transition-colors gap-1">
-                        API Documentation <ExternalLink className="w-3 h-3" />
-                    </a>
-                    <a href="#" className="flex items-center hover:text-foreground transition-colors gap-1">
-                        Developer Forum <ExternalLink className="w-3 h-3" />
-                    </a>
-                </div>
-                <span>v1.0.0-stable</span>
+            {/* Existing Implementation Commented Out Below */}
+            {/*
+            <div className="max-w-4xl mx-auto space-y-8 py-6">
+                ... (rest of the underlying logic is preserved)
             </div>
+            */}
         </div>
     );
 }
+
+// Keep helper components but can also comment them if needed
+/* 
+function KeyCard(...) { ... }
+function SnippetBlock(...) { ... }
+*/

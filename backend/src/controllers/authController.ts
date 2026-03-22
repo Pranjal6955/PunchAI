@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
-import apiKeyService from "../services/apiKeyService";
 
 const generateToken = (id: string) => {
     return jwt.sign({ id }, process.env.JWT_SECRET as string, {
@@ -29,11 +28,12 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // No API key is generated at registration.
+        // The user must visit the Integrations page to generate primary/fallback keys.
         const user = await User.create({
             fullName,
             email,
             password: hashedPassword,
-            apiKey: apiKeyService.generateKey(),
         });
 
         if (user) {
@@ -43,7 +43,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
                 email: user.email,
                 isOnboarded: user.isOnboarded,
                 profileImage: user.profileImage,
-                apiKey: user.apiKey,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -61,19 +60,15 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         const user = await User.findOne({ email });
 
         if (user && (await bcrypt.compare(password, user.password))) {
-            // Generate API key if missing (for legacy users)
-            if (!user.apiKey) {
-                user.apiKey = apiKeyService.generateKey();
-                await user.save();
-            }
-
             res.json({
                 _id: user._id,
                 fullName: user.fullName,
                 email: user.email,
                 isOnboarded: user.isOnboarded,
                 profileImage: user.profileImage,
-                apiKey: user.apiKey,
+                // Never return the raw key — only indicate whether one has been generated.
+                // To get/rotate keys, use GET/POST /api/user/api-key-status or /generate-api-key
+                hasPrimaryKey: !!(user as any).primaryApiKeyHash,
                 token: generateToken(user._id.toString()),
             });
         } else {
@@ -103,7 +98,8 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
                 supportedLanguages: user.supportedLanguages,
                 knowledgeBaseSetup: user.knowledgeBaseSetup,
                 profileImage: user.profileImage,
-                apiKey: user.apiKey,
+                // Keys are NEVER returned from /me — use GET /api/user/api-key-status
+                hasPrimaryKey: !!(user as any).primaryApiKeyHash,
             });
             return;
         }
@@ -128,7 +124,7 @@ export const uploadProfileImage = async (req: Request, res: Response): Promise<v
         const updatedUser = await User.findByIdAndUpdate(
             userId,
             { profileImage: profileImageUrl },
-            { new: true }
+            { returnDocument: "after" }
         ).select("-password");
 
         if (updatedUser) {

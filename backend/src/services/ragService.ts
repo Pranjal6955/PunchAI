@@ -1,148 +1,155 @@
-import { scrapeWebsite } from "./puppeteerService";
-import { extractTextFromFile } from "./documentService";
-import { generateEmbedding, chunkText } from "./embeddingService";
-import { upsertVectors, deleteVectorsByDataSource, VectorData } from "./pineconeService";
-import DataSource from "../models/DataSource";
-import { v4 as uuidv4 } from "uuid";
-
 /**
- * Main process pipeline for DataSource items
+ * rag.service.ts — Query-time RAG Pipeline
+ *
+ * Orchestrates:
+ *   1. Embed the user message
+ *   2. Similarity-search Pinecone (always filtered by userId)
+ *   3. Build a context-aware prompt
+ *   4. Call the LLM (buffered or streaming)
+ *   5. Return answer + source attribution
  */
-export const processDataSource = async (dataSourceId: string) => {
+
+import { Response } from "express";
+import { generateEmbedding } from "./embeddingService";
+import { searchVectors, VectorMatch } from "./vector.service";
+import { generateLLMResponse, streamLLMResponse } from "./llm.service";
+import { buildContextFromMatches, buildRAGPrompt } from "./prompt.builder";
+
+// ─── Types ─────────────────────────────────────────────────────────────────
+export interface RAGSource {
+    sourceType: string;
+    sourceName: string;
+}
+
+export interface RAGResult {
+    answer: string;
+    sources: RAGSource[];
+}
+
+// ─── Fallback message ───────────────────────────────────────────────────────
+const NO_CONTEXT_RESPONSE =
+    "Sorry, I couldn't find relevant information to answer your question. " +
+    "Please make sure the relevant data sources have been added and processed.";
+
+// ─── Shared: embed + search ─────────────────────────────────────────────────
+const embedAndSearch = async (
+    userId: string,
+    userMessage: string,
+    topK: number
+): Promise<VectorMatch[]> => {
+    const queryEmbedding = await generateEmbedding(userMessage);
+
     try {
-        const dataSource = await DataSource.findById(dataSourceId);
-        if (!dataSource) throw new Error("DataSource not found");
-
-        dataSource.status = "processing";
-        await dataSource.save();
-
-        let extractedText = "";
-
-        if (dataSource.type === "website" && dataSource.sourceUrl) {
-            extractedText = await scrapeWebsite(dataSource.sourceUrl);
-        } else if (dataSource.type === "document" && dataSource.fileUrl) {
-            // Assume fileUrl contains path + ':::' + mimetype for demo or we store it elsewhere
-            const [path, mimetype] = dataSource.fileUrl.split(":::");
-            extractedText = await extractTextFromFile(path, mimetype || "text/plain");
-        } else if (dataSource.type === "faq" && dataSource.faqs && dataSource.faqs.length > 0) {
-            // FAQ array combining
-            extractedText = dataSource.faqs.map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n");
-        } else {
-            throw new Error("Invalid DataSource type or missing required fields");
-        }
-
-        if (!extractedText || extractedText.trim() === "") {
-            throw new Error("No text content could be extracted from the source");
-        }
-
-        const chunks = chunkText(extractedText, 500); // 500 maxTokens approx chunks
-        const vectors: VectorData[] = [];
-
-        // In a real app with rate limits, we should sleep or batch intelligently
-        for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            const embedding = await generateEmbedding(chunk);
-            vectors.push({
-                id: `ds_${dataSource._id.toString()}_${uuidv4()}`,
-                values: embedding,
-                metadata: {
-                    dataSourceId: dataSource._id.toString(),
-                    userId: dataSource.userId.toString(),
-                    sourceType: dataSource.type,
-                    text: chunk,
-                },
-            });
-        }
-
-        await upsertVectors(vectors);
-
-        dataSource.status = "completed";
-        dataSource.vectorCount = vectors.length;
-        dataSource.errorMessage = undefined;
-        dataSource.extractedText = extractedText;
-        await dataSource.save();
-    } catch (error: any) {
-        console.error(`Error processing data source ${dataSourceId}:`, error);
-
-        try {
-            const dataSource = await DataSource.findById(dataSourceId);
-            if (dataSource) {
-                dataSource.status = "failed";
-                dataSource.errorMessage = error.message.slice(0, 1000);
-                await dataSource.save();
-            }
-        } catch (dbError) {
-            console.error("Critical failure writing status to DB", dbError);
-        }
+        return await searchVectors({ queryEmbedding, userId, topK });
+    } catch (err: any) {
+        console.error("[RAGService] Vector search failed:", err.message);
+        return [];
     }
 };
 
-/**
- * Async processing to manual re-embed user-edited text
- */
-export const reprocessProvidedText = async (dataSourceId: string, customText: string) => {
-    try {
-        const dataSource = await DataSource.findById(dataSourceId);
-        if (!dataSource) throw new Error("DataSource not found");
+// ─── Shared: deduplicate sources ─────────────────────────────────────────────
+const deduplicateSources = (matches: VectorMatch[]): RAGSource[] => {
+    const seen = new Set<string>();
+    const sources: RAGSource[] = [];
 
-        dataSource.status = "processing";
-        await dataSource.save();
-
-        if (!customText || customText.trim() === "") {
-            throw new Error("No text content provided to process");
-        }
-
-        // Delete previous vectors
-        await deleteVectorsByDataSource(dataSourceId);
-
-        const chunks = chunkText(customText, 500);
-        const vectors: VectorData[] = [];
-
-        for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            const embedding = await generateEmbedding(chunk);
-            vectors.push({
-                id: `ds_${dataSource._id.toString()}_${uuidv4()}`,
-                values: embedding,
-                metadata: {
-                    dataSourceId: dataSource._id.toString(),
-                    userId: dataSource.userId.toString(),
-                    sourceType: dataSource.type,
-                    text: chunk,
-                },
-            });
-        }
-
-        await upsertVectors(vectors);
-
-        dataSource.status = "completed";
-        dataSource.vectorCount = vectors.length;
-        dataSource.errorMessage = undefined;
-        dataSource.extractedText = customText;
-        await dataSource.save();
-    } catch (error: any) {
-        console.error(`Error processing custom text for ${dataSourceId}:`, error);
-
-        try {
-            const dataSource = await DataSource.findById(dataSourceId);
-            if (dataSource) {
-                dataSource.status = "failed";
-                dataSource.errorMessage = error.message.slice(0, 1000);
-                await dataSource.save();
-            }
-        } catch (dbError) {
-            console.error("Critical failure writing status to DB", dbError);
+    for (const match of matches) {
+        const key = `${match.sourceType}::${match.sourceName}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            sources.push({ sourceType: match.sourceType, sourceName: match.sourceName });
         }
     }
+
+    return sources;
 };
 
-/**
- * Async removal of an existing datasource and its vectors
- */
-export const removeDataSourceProcessing = async (dataSourceId: string) => {
+// ─── Buffered RAG Pipeline ─────────────────────────────────────────────────
+export const runRAGPipeline = async (
+    userId: string,
+    userMessage: string,
+    chatHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+    topK: number = 5
+): Promise<RAGResult> => {
+    let queryEmbedding: number[];
     try {
-        await deleteVectorsByDataSource(dataSourceId);
-    } catch (error) {
-        console.error(`Error removing data source vectors for ${dataSourceId}`, error);
+        queryEmbedding = await generateEmbedding(userMessage);
+    } catch (embedErr: any) {
+        throw new Error(`Failed to generate query embedding: ${embedErr.message}`);
+    }
+
+    const matches = await embedAndSearch(userId, userMessage, topK);
+
+    if (matches.length === 0) {
+        return { answer: NO_CONTEXT_RESPONSE, sources: [] };
+    }
+
+    const contextText = buildContextFromMatches(matches);
+    const messages = buildRAGPrompt(userMessage, contextText, chatHistory);
+
+    let llmResponse: { text: string };
+    try {
+        llmResponse = await generateLLMResponse(messages);
+    } catch (llmErr: any) {
+        throw new Error(`LLM generation failed: ${llmErr.message}`);
+    }
+
+    return {
+        answer: llmResponse.text,
+        sources: deduplicateSources(matches),
+    };
+};
+
+// ─── Streaming RAG Pipeline ──────────────────────────────────────────────────
+/**
+ * Runs the RAG pipeline and streams the LLM response via SSE.
+ *
+ * SSE events emitted:
+ *   data: {"token": "..."}\n\n         ← token chunks
+ *   data: {"sources": [...]}\n\n       ← source citations sent before done
+ *   data: {"done": true}\n\n           ← end-of-stream marker
+ *   data: {"error": "..."}\n\n         ← on failure
+ *
+ * Returns the full assembled answer string (for saving to DB).
+ */
+export const runRAGPipelineStream = async (
+    userId: string,
+    userMessage: string,
+    chatHistory: Array<{ role: "user" | "assistant"; content: string }>,
+    res: Response,
+    topK: number = 5
+): Promise<string> => {
+    const write = (payload: object) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+    let matches: VectorMatch[] = [];
+    try {
+        matches = await embedAndSearch(userId, userMessage, topK);
+    } catch (err: any) {
+        write({ error: "Failed to search knowledge base. Please try again." });
+        res.end();
+        return NO_CONTEXT_RESPONSE;
+    }
+
+    if (matches.length === 0) {
+        write({ token: NO_CONTEXT_RESPONSE });
+        write({ sources: [], done: true });
+        res.end();
+        return NO_CONTEXT_RESPONSE;
+    }
+
+    const contextText = buildContextFromMatches(matches);
+    const messages = buildRAGPrompt(userMessage, contextText, chatHistory);
+    const sources = deduplicateSources(matches);
+
+    // Send sources early so the client can render citations while text streams
+    write({ sources });
+
+    try {
+        const fullText = await streamLLMResponse(messages, res);
+        res.end();
+        return fullText;
+    } catch (err: any) {
+        console.error("[RAGService] Streaming LLM failed:", err.message);
+        res.end();
+        return "";
     }
 };

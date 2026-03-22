@@ -50,11 +50,37 @@ const userSchema = new mongoose.Schema(
             type: Number,
             default: 1,
         },
-        apiKey: {
+
+        // ── Legacy (migration only) ────────────────────────────────────────
+        /** @deprecated Use primaryApiKeyHash instead. */
+        apiKey: { type: String, unique: true, sparse: true },
+        /** @deprecated Use primaryApiKeyHash instead. */
+        apiKeyHash: { type: String, unique: true, sparse: true },
+
+        // ── Primary API Key ────────────────────────────────────────────────
+        // The "live" key embedded in production chat widgets.
+        primaryApiKeyHash: {
             type: String,
             unique: true,
             sparse: true,
-        }
+            index: true,
+        },
+        primaryApiKeyCreatedAt: {
+            type: Date,
+        },
+
+        // ── Fallback API Key ───────────────────────────────────────────────
+        // Used during key rotation: deploy the fallback key first, then
+        // rotate the primary, then revoke the fallback.
+        fallbackApiKeyHash: {
+            type: String,
+            unique: true,
+            sparse: true,
+            index: true,
+        },
+        fallbackApiKeyCreatedAt: {
+            type: Date,
+        },
     },
     {
         timestamps: true,

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import DataSource from "../models/DataSource";
-import { processDataSource, removeDataSourceProcessing, reprocessProvidedText } from "../services/ragService";
+import { processDataSource, removeDataSourceProcessing, reprocessProvidedText } from "../services/ingestion.service";
 
 // Helper for type
 interface AuthRequest extends Request {
