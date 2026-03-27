@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.core import security
 from app.core.config import settings
-from app.schemas.user import UserCreate, UserResponse, Token, TokenData, UserBase
+from app.schemas.user import UserCreate, UserResponse, Token, TokenData, UserBase, UserLogin
 from app.db.prisma import prisma
 
 router = APIRouter()
@@ -33,8 +33,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return user
 
-@router.post("/signup", response_model=UserResponse)
-async def signup(user_in: UserCreate):
+@router.post("/register")
+async def register_user(user_in: UserCreate):
     # Check if user already exists
     user = await prisma.user.find_unique(where={"email": user_in.email})
     if user:
@@ -49,15 +49,27 @@ async def signup(user_in: UserCreate):
         data={
             "email": user_in.email,
             "password": hashed_password,
-            "name": user_in.name,
+            "fullName": user_in.fullName,
         }
     )
-    return new_user
+    
+    # Auto-login after signup
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        subject=new_user.email, expires_delta=access_token_expires
+    )
+    
+    return {
+        "token": access_token,
+        "_id": new_user.id,
+        "email": new_user.email,
+        "fullName": new_user.fullName
+    }
 
-@router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await prisma.user.find_unique(where={"email": form_data.username})
-    if not user or not security.verify_password(form_data.password, user.password):
+@router.post("/login")
+async def login(login_data: UserLogin):
+    user = await prisma.user.find_unique(where={"email": login_data.email})
+    if not user or not security.verify_password(login_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -68,8 +80,20 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = security.create_access_token(
         subject=user.email, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    return {
+        "token": access_token, 
+        "_id": user.id,
+        "email": user.email,
+        "fullName": user.fullName
+    }
 
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user = Depends(get_current_user)):
-    return current_user
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "fullName": current_user.fullName,
+        "createdAt": current_user.createdAt,
+        "updatedAt": current_user.updatedAt
+    }
