@@ -1,6 +1,6 @@
 "use client"
 
-import { Bot, CreditCard, Layers, TrendingUp, Users, Zap } from "lucide-react"
+import { Bot, CreditCard, Layers, Plus, TrendingUp, Users, Zap } from "lucide-react"
 import {
     Card,
     CardContent,
@@ -24,9 +24,13 @@ import {
 } from "@/components/ui/chart"
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, Line, LineChart, Tooltip } from "recharts"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import * as React from "react"
+import { CreateBotDialog } from "@/components/chatbot/create-bot-dialog"
+import { api } from "@/lib/api"
+import { formatDistanceToNow } from "date-fns"
 
 const usageData = [
     { day: "Mon", tokens: 4200 },
@@ -45,44 +49,33 @@ const chartConfig = {
     },
 } satisfies ChartConfig
 
-const agents = [
-    {
-        name: "Customer Support Bot",
-        status: "Active",
-        type: "GPT-4o",
-        activity: "2 mins ago",
-        usage: "12,400 tokens",
-    },
-    {
-        name: "Sales Outreach AI",
-        status: "Paused",
-        type: "Claude 3.5 Sonnet",
-        activity: "1 hour ago",
-        usage: "5,200 tokens",
-    },
-    {
-        name: "Documentation Specialist",
-        status: "Active",
-        type: "GPT-4 Turbo",
-        activity: "Just now",
-        usage: "8,900 tokens",
-    },
-    {
-        name: "Marketing Content Gen",
-        status: "Error",
-        type: "Mistral Large",
-        activity: "15 mins ago",
-        usage: "1,100 tokens",
-    },
-]
+interface BotData {
+    id: string
+    name: string
+    type: string
+    description?: string
+    createdAt: string
+    status?: string // Added locally for demo
+}
 
 export default function DashboardPage() {
     const [loading, setLoading] = React.useState(true)
+    const [bots, setBots] = React.useState<BotData[]>([])
+
+    const fetchBots = React.useCallback(async () => {
+        try {
+            const data = await api.get("/bots/")
+            setBots(data)
+        } catch (error) {
+            console.error("Failed to fetch bots:", error)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
 
     React.useEffect(() => {
-        const timer = setTimeout(() => setLoading(false), 1500)
-        return () => clearTimeout(timer)
-    }, [])
+        fetchBots()
+    }, [fetchBots])
 
     if (loading) {
         return (
@@ -92,6 +85,7 @@ export default function DashboardPage() {
                         <Skeleton className="h-9 w-64" />
                         <Skeleton className="h-4 w-48 mt-2" />
                     </div>
+                    <Skeleton className="h-10 w-40" />
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -173,6 +167,7 @@ export default function DashboardPage() {
                         Real-time analytics and agent management.
                     </p>
                 </div>
+                <CreateBotDialog onSuccess={fetchBots} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -182,9 +177,9 @@ export default function DashboardPage() {
                         <Bot className="text-muted-foreground h-4 w-4" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">12</div>
+                        <div className="text-2xl font-bold">{bots.length}</div>
                         <p className="text-xs text-green-600 dark:text-green-400 font-medium mt-1">
-                            +2 from last month
+                            {bots.length > 0 ? `Active across all regions` : `No bots created yet`}
                         </p>
                     </CardContent>
                 </Card>
@@ -260,26 +255,34 @@ export default function DashboardPage() {
 
                 <Card className="col-span-3 rounded-xl border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50">
                     <CardHeader>
-                        <CardTitle>Recent Activity</CardTitle>
-                        <CardDescription>Latest events from your AI fleet.</CardDescription>
+                        <CardTitle>Recent Bots</CardTitle>
+                        <CardDescription>Latest agents in your fleet.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-8">
-                            {agents.slice(0, 4).map((agent, i) => (
-                                <div key={i} className="flex items-center gap-4">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                                        <Bot className="h-5 w-5 text-black dark:text-zinc-200" />
+                            {bots.length > 0 ? (
+                                bots.slice(0, 4).map((bot, i) => (
+                                    <div key={bot.id} className="flex items-center gap-4">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                                            <Bot className="h-5 w-5 text-black dark:text-zinc-200" />
+                                        </div>
+                                        <div className="flex flex-1 flex-col gap-1">
+                                            <p className="text-sm font-medium leading-none">{bot.name}</p>
+                                            <p className="text-xs text-muted-foreground">{bot.type}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-muted-foreground">
+                                                {formatDistanceToNow(new Date(bot.createdAt), { addSuffix: true })}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex flex-1 flex-col gap-1">
-                                        <p className="text-sm font-medium leading-none">{agent.name}</p>
-                                        <p className="text-xs text-muted-foreground">{agent.type}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-medium">{agent.usage}</p>
-                                        <p className="text-xs text-muted-foreground">{agent.activity}</p>
-                                    </div>
+                                ))
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-10 text-center">
+                                    <Bot className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                                    <p className="text-sm text-muted-foreground">No bots yet. Create one to get started.</p>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -301,33 +304,41 @@ export default function DashboardPage() {
                                 <TableHead className="w-[200px]">Agent Name</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Model Type</TableHead>
-                                <TableHead>Last Activity</TableHead>
-                                <TableHead className="text-right">Usage</TableHead>
+                                <TableHead>Created</TableHead>
+                                <TableHead className="text-right">Action</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {agents.map((agent) => (
-                                <TableRow key={agent.name}>
-                                    <TableCell className="font-medium">{agent.name}</TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={
-                                                agent.status === "Active"
-                                                    ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                                                    : agent.status === "Paused"
-                                                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
-                                                        : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
-                                            }
-                                        >
-                                            {agent.status}
-                                        </Badge>
+                            {bots.length > 0 ? (
+                                bots.map((bot) => (
+                                    <TableRow key={bot.id}>
+                                        <TableCell className="font-medium">{bot.name}</TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant="outline"
+                                                className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
+                                            >
+                                                Active
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-zinc-500 dark:text-zinc-400 text-sm">{bot.type}</TableCell>
+                                        <TableCell className="text-zinc-500 dark:text-zinc-400 text-sm">
+                                            {new Date(bot.createdAt).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            <Button variant="ghost" size="sm" className="text-xs">
+                                                Edit
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center">
+                                        No agents found.
                                     </TableCell>
-                                    <TableCell className="text-zinc-500 dark:text-zinc-400 text-sm">{agent.type}</TableCell>
-                                    <TableCell className="text-zinc-500 dark:text-zinc-400 text-sm">{agent.activity}</TableCell>
-                                    <TableCell className="text-right font-medium">{agent.usage}</TableCell>
                                 </TableRow>
-                            ))}
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>

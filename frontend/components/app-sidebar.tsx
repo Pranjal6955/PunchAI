@@ -4,6 +4,7 @@ import * as React from "react"
 import {
     BadgeCheck,
     Bell,
+    Bot,
     ChevronsUpDown,
     Command,
     CreditCard,
@@ -47,13 +48,18 @@ const data = {
     user: {
         name: "[FULL_NAME]",
         email: "[EMAIL_ADDRESS]",
-        avatar: "/avatars/user.jpg",
+        avatar: "",
     },
     navMain: [
         {
             title: "Overview",
             url: "/dashboard",
             icon: LayoutDashboard,
+        },
+        {
+            title: "Chatbots",
+            url: "/dashboard/Chatbot",
+            icon: Bot,
         },
         {
             title: "Data Sources",
@@ -101,6 +107,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                         alt="PunchAI Logo"
                                         width={28}
                                         height={28}
+                                        style={{ height: "auto" }}
                                         className="rounded-lg object-contain"
                                     />
                                 </div>

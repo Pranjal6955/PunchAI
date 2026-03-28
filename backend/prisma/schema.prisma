@@ -27,7 +27,8 @@ model ChatBot {
   id          String   @id @default(uuid())
   name        String
   description String?
-  type        String?
+  engine      String
+  type        String
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
