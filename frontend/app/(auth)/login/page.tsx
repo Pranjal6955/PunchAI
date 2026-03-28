@@ -66,7 +66,8 @@ export default function LoginPage() {
             localStorage.setItem("punch_user", JSON.stringify({
                 _id: result._id,
                 email: result.email,
-                fullName: result.fullName
+                name: result.name,
+                avatar: result.avatar
             }))
 
             toast.success("Welcome back to Punch AI!")

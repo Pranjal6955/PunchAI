@@ -74,7 +74,8 @@ export default function RegisterPage() {
             localStorage.setItem("punch_user", JSON.stringify({
                 _id: result._id,
                 email: result.email,
-                fullName: result.fullName
+                name: result.name,
+                avatar: result.avatar
             }))
 
             toast.success("Account created successfully!")

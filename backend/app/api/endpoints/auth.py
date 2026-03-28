@@ -63,7 +63,8 @@ async def register_user(user_in: UserCreate):
         "token": access_token,
         "_id": new_user.id,
         "email": new_user.email,
-        "fullName": new_user.fullName
+        "name": new_user.fullName,
+        "avatar": new_user.avatar
     }
 
 @router.post("/login")
@@ -85,7 +86,8 @@ async def login(login_data: UserLogin):
         "token": access_token, 
         "_id": user.id,
         "email": user.email,
-        "fullName": user.fullName
+        "name": user.fullName,
+        "avatar": user.avatar
     }
 
 @router.get("/me", response_model=UserResponse)
