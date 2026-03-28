@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints import auth
+from app.api.endpoints import auth, bots
 from app.db.prisma import prisma
 
 app = FastAPI(title="PunchAI API", version="0.1.0")
@@ -24,6 +24,8 @@ async def shutdown():
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(bots.router, prefix="/api/bots", tags=["bots"])
+
 
 @app.get("/api/health")
 async def health_check():
