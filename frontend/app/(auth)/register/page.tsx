@@ -94,7 +94,7 @@ export default function RegisterPage() {
             {/* Decorative Glow */}
             <div className="absolute top-0 -z-10 h-[400px] w-full bg-gradient-to-b from-primary/5 to-transparent blur-3xl" />
 
-            <main className="relative z-10 w-full max-w-[400px] px-6">
+            <main className="relative z-10 w-full max-w-[440px] px-6">
                 <div className="flex flex-col items-center space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
                     {/* Logo Section */}
                     <div className="flex flex-col items-center space-y-4">
