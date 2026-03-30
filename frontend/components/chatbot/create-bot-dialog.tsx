@@ -264,40 +264,17 @@ export function CreateBotDialog({ onSuccess, bot, trigger }: CreateBotDialogProp
                         <FieldError errors={[{ message: errors.description?.message }]} />
                     </Field>
 
-                    <DialogFooter className="flex items-center justify-between pt-4">
+                    <div className="flex items-center justify-between pt-6 border-t font-medium">
                         <div className="flex items-center gap-2">
-                            {isEditing && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-900/20"
-                                    onClick={async () => {
-                                        if (confirm("Are you sure you want to delete this chatbot?")) {
-                                            setIsSubmitting(true)
-                                            try {
-                                                await api.delete(`/bots/${bot.id}`)
-                                                toast.success("Chatbot deleted successfully!")
-                                                setOpen(false)
-                                                if (onSuccess) onSuccess()
-                                            } catch (error: any) {
-                                                toast.error(error.message || "Failed to delete chatbot")
-                                            } finally {
-                                                setIsSubmitting(false)
-                                            }
-                                        }
-                                    }}
-                                    disabled={isSubmitting}
-                                >
-                                    Delete Bot
-                                </Button>
-                            )}
+                            <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="h-10">
+                                Cancel
+                            </Button>
                         </div>
                         <div className="flex items-center gap-2">
-                            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
                             <Button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 min-w-[120px]"
+                                className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 min-w-[140px] h-10 shadow-sm"
                             >
                                 {isSubmitting ? (
                                     <span className="flex items-center gap-2">
@@ -305,11 +282,11 @@ export function CreateBotDialog({ onSuccess, bot, trigger }: CreateBotDialogProp
                                         {isEditing ? "Updating..." : "Creating..."}
                                     </span>
                                 ) : (
-                                    isEditing ? "Save Changes" : "Launch Bot"
+                                    isEditing ? "Save Changes" : "Create Agent"
                                 )}
                             </Button>
                         </div>
-                    </DialogFooter>
+                    </div>
                 </form>
             </DialogContent>
         </Dialog>
