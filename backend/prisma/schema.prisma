@@ -1,0 +1,152 @@
+// ─── Prisma Schema for PunchAI Backend ───
+// Uses Neon PostgreSQL as the datasource
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+generator client {
+    provider             = "prisma-client-py"
+    interface            = "asyncio"
+    recursive_type_depth = 5
+}
+
+// ─── User Model ───
+model User {
+    id        String   @id @default(cuid())
+    email     String   @unique
+    password  String   @map("password_hash")
+    name      String?
+    avatar    String?
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    bots  Bot[]
+    chats Chat[]
+
+    @@map("users")
+}
+
+// ─── Bot / AI Agent Model ───
+model Bot {
+    id          String  @id @default(cuid())
+    name        String
+    description String?
+    botPersona  String? @map("bot_persona")
+
+    ownerId String @map("owner_id")
+    owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+    dataSources    DataSource[]
+    chats          Chat[]
+    documentChunks DocumentChunk[]
+    faqs           Faq[]
+
+    @@map("bots")
+}
+
+// ─── Data Source Model ───
+model DataSource {
+    id        String         @id @default(cuid())
+    name      String
+    type      DataSourceType @default(FILE)
+    status    SourceStatus   @default(PENDING)
+    fileUrl   String?        @map("file_url")
+    metadata  Json?
+    createdAt DateTime       @default(now()) @map("created_at")
+    updatedAt DateTime       @updatedAt @map("updated_at")
+
+    botId String @map("bot_id")
+    bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+    chunks DocumentChunk[]
+    faqs   Faq[]
+
+    @@map("data_sources")
+}
+
+// ─── Raw Data / Extracted Text Chunks ───
+model DocumentChunk {
+    id        String   @id @default(cuid())
+    content   String   @db.Text
+    metadata  Json?
+    createdAt DateTime @default(now()) @map("created_at")
+
+    sourceId String     @map("source_id")
+    source   DataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+    botId String @map("bot_id")
+    bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+    @@map("document_chunks")
+}
+
+// ─── Managed FAQ Model (for Granular Updates/Deletions) ───
+model Faq {
+    id        String   @id @default(cuid())
+    question  String
+    answer    String   @db.Text
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    sourceId String?     @map("source_id")
+    source   DataSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+    botId String @map("bot_id")
+    bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+    @@map("faqs")
+}
+
+// ─── Chat Conversation Model ───
+model Chat {
+    id        String   @id @default(cuid())
+    title     String?
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    userId String @map("user_id")
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    botId String @map("bot_id")
+    bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+    messages Message[]
+
+    @@map("chats")
+}
+
+// ─── Chat Message Model ───
+model Message {
+    id        String      @id @default(cuid())
+    role      MessageRole @default(USER)
+    content   String
+    metadata  Json?
+    createdAt DateTime    @default(now()) @map("created_at")
+
+    chatId String @map("chat_id")
+    chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+    @@map("messages")
+}
+
+// ─── Enums ───
+enum DataSourceType {
+    FILE
+    URL
+    TEXT
+}
+
+enum SourceStatus {
+    PENDING
+    PROCESSING
+    COMPLETED
+    FAILED
+}
+
+enum MessageRole {
+    USER
+    ASSISTANT
+    SYSTEM
+}
