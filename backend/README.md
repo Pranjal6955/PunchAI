@@ -10,6 +10,7 @@ A high-performance **Retrieval-Augmented Generation (RAG)** backend built with *
 backend/
 ├── chroma_db/             # Persistent Vector Database
 ├── uploads/               # Local PDF storage (for indexing)
+├── tests/                 # Automated Test Cases (Pytest)
 ├── prisma/
 │   └── schema.prisma      # DB Schema (User, Bot, Faq, DocumentChunk, Chat)
 ├── app/
@@ -93,6 +94,21 @@ ollama pull llama3
 uvicorn app.main:app --reload --port 8000
 ```
 Visit **http://localhost:8000/docs** for the Swagger UI.
+
+### 5. Running Tests
+
+The project uses `pytest` for automated integration testing.
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_auth.py
+
+# Run with output
+pytest -v
+```
 
 ---
 
