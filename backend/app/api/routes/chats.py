@@ -13,7 +13,7 @@ from app.schemas.chat import (
     MessageResponse,
 )
 from app.api.deps import get_current_user
-from app.services.processor import retrieve_context
+from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_ollama_response
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -66,8 +66,8 @@ async def add_message(
         }
     )
 
-    # 2. RAG Retrieval (ChromaDB local)
-    context_chunks = retrieve_context(bot_id=chat.botId, query=payload.content)
+    # 2. Hybrid RAG Retrieval (Vector + Keyword)
+    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=payload.content, top_k=5)
     
     # Optional: Log the retrieved context into the user's message metadata
     await db.message.update(where={"id": user_msg.id}, data={"metadata": {"chunks": context_chunks}})

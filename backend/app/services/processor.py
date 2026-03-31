@@ -77,27 +77,54 @@ def process_and_store(
     return True
 
 
-def retrieve_context(bot_id: str, query: str, top_k: int = 5) -> List[str]:
-    """
-    1. Embed the user query
-    2. Search the bot-specific Chroma collection
-    3. Return top-K relevant text chunks
-    """
+def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str]:
+    """Retrieve relevant chunks using Vector Search (ChromaDB)."""
     collection = get_collection(bot_id)
-    
-    # Embed the query
     query_embedding = model.encode(query).tolist()
     
-    # Query ChromaDB (returns results sorted by cosine similarity)
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,
-        include=["documents", "metadatas", "distances"]
+        include=["documents"]
     )
     
-    # Flatten the result list
-    retrieved_chunks = []
-    if results and results['documents']:
-        retrieved_chunks = results['documents'][0]
-        
-    return retrieved_chunks
+    return results['documents'][0] if results and results['documents'] else []
+
+
+async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str]:
+    """Retrieve relevant chunks using Keyword Search (PostgreSQL Full-Text)."""
+    from app.core.database import db
+    
+    # We use a case-insensitive search across chunks belonging to the bot.
+    # For a production setup, consider using Postgres tsvector/tsquery for better BM25.
+    chunks = await db.documentchunk.find_many(
+        where={
+            "botId": bot_id,
+            "content": {"contains": query, "mode": "insensitive"}
+        },
+        take=top_k
+    )
+    return [c.content for c in chunks]
+
+
+async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5) -> List[str]:
+    """
+    Combines Semantic Search and Keyword Search (Hybrid Search).
+    Removes duplicates and returns the best top-K chunks.
+    """
+    # 1. Semantic (Vector)
+    semantic_results = retrieve_semantic(bot_id, query, top_k=top_k)
+    
+    # 2. Keyword (SQL)
+    keyword_results = await retrieve_keywords(bot_id, query, top_k=top_k)
+    
+    # 3. Combine and Deduplicate (preserving order of semantic first)
+    combined = []
+    seen = set()
+    
+    for res in semantic_results + keyword_results:
+        if res not in seen:
+            combined.append(res)
+            seen.add(res)
+            
+    return combined[:top_k]

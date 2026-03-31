@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from app.core.database import db
 from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, BotWithUserResponse
 from app.api.deps import get_current_user
+from app.core.vector_store import delete_collection
 
 router = APIRouter(prefix="/bots", tags=["Bots"])
 
@@ -87,5 +88,9 @@ async def delete_bot(bot_id: str, current_user=Depends(get_current_user)):
     if bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this bot")
 
+    # 1. Delete from Vector Store
+    delete_collection(bot_id)
+
+    # 2. Delete from Database (cascades to chats, sources, etc.)
     await db.bot.delete(where={"id": bot_id})
     return None
