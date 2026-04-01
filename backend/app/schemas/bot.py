@@ -30,6 +30,7 @@ class BotResponse(BaseModel):
     description: Optional[str] = None
     botPersona: Optional[str] = None
     ownerId: str
+    dataSourceCount: Optional[int] = 0
 
     model_config = {"from_attributes": True}
 

@@ -15,6 +15,7 @@ import {
     User,
     ChevronLeft,
     Sparkles,
+    Eye,
 } from "lucide-react"
 import {
     Card,
@@ -43,20 +44,20 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { botApi, chatApi, authApi } from "@/lib/api-client"
+import { botApi, authApi } from "@/lib/api-client"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useRouter } from "next/navigation"
 
 export default function ChatbotPage() {
+    const router = useRouter()
     const [bots, setBots] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [user, setUser] = useState<any>(null)
     const [searchQuery, setSearchQuery] = useState("")
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
-    const [selectedBot, setSelectedBot] = useState<any>(null)
-    const [view, setView] = useState<"list" | "chat">("list")
 
     // New Bot Form State
     const [newBot, setNewBot] = useState({
@@ -64,12 +65,6 @@ export default function ChatbotPage() {
         description: "",
         botPersona: "",
     })
-
-    // Chat State
-    const [messages, setMessages] = useState<any[]>([])
-    const [input, setInput] = useState("")
-    const [isSending, setIsSending] = useState(false)
-    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
 
     useEffect(() => {
         const init = async () => {
@@ -120,156 +115,11 @@ export default function ChatbotPage() {
         }
     }
 
-    const startChat = (bot: any) => {
-        setSelectedBot(bot)
-        setView("chat")
-        setMessages([
-            {
-                id: "welcome",
-                role: "assistant",
-                content: `Hi! I'm ${bot.name}. How can I help you today?`,
-                createdAt: new Date().toISOString()
-            }
-        ])
-    }
-
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!input.trim() || !selectedBot || isSending) return
-
-        const userMessage = {
-            id: Date.now().toString(),
-            role: "user",
-            content: input.trim(),
-            createdAt: new Date().toISOString()
-        }
-
-        setMessages((prev) => [...prev, userMessage])
-        const query = input.trim()
-        setInput("")
-        setIsSending(true)
-
-        try {
-            const response = await chatApi.sendMessage(
-                selectedBot.id,
-                query,
-                currentSessionId || undefined
-            )
-
-            const botMessage = {
-                id: response.id,
-                role: "assistant",
-                content: response.content,
-                createdAt: new Date().toISOString()
-            }
-
-            if (response.sessionId) setCurrentSessionId(response.sessionId)
-            setMessages((prev) => [...prev, botMessage])
-        } catch (err) {
-            console.error("Chat error:", err)
-            toast.error("Failed to get response")
-        } finally {
-            setIsSending(false)
-        }
-    }
-
     const filteredBots = bots.filter(
         (bot) =>
             bot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             bot.description?.toLowerCase().includes(searchQuery.toLowerCase())
     )
-
-    if (view === "chat" && selectedBot) {
-        return (
-            <div className="flex flex-col h-[calc(100vh-8rem)] animate-in slide-in-from-right duration-500">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-4">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                                setView("list")
-                                setCurrentSessionId(null)
-                            }}
-                            className="rounded-full hover:bg-primary/10"
-                        >
-                            <ChevronLeft className="size-5" />
-                        </Button>
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                <Bot className="size-5" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold tracking-tight">{selectedBot.name}</h2>
-                                <p className="text-xs text-muted-foreground">Playground Mode</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-hidden flex flex-col bg-background/50 border rounded-2xl shadow-xl border-primary/10 backdrop-blur-sm">
-                    {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-primary/10 scrollbar-track-transparent">
-                        {messages.map((m) => (
-                            <div
-                                key={m.id}
-                                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
-                            >
-                                <div className={`flex gap-3 max-w-[80%] ${m.role === "user" ? "flex-row-reverse" : ""}`}>
-                                    <Avatar className="h-8 w-8 shrink-0 shadow-sm">
-                                        <AvatarFallback className={m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}>
-                                            {m.role === "user" ? <User className="size-4" /> : <Bot className="size-4" />}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className={`p-4 rounded-2xl shadow-sm ${m.role === "user"
-                                        ? "bg-primary text-primary-foreground rounded-tr-none"
-                                        : "bg-muted/80 backdrop-blur-sm border rounded-tl-none"
-                                        }`}>
-                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
-                                        <p className={`text-[10px] mt-2 ${m.role === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                                            {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {isSending && (
-                            <div className="flex justify-start animate-pulse">
-                                <div className="flex gap-3 max-w-[80%]">
-                                    <Avatar className="h-8 w-8 shrink-0">
-                                        <AvatarFallback className="bg-muted"><Bot className="size-4" /></AvatarFallback>
-                                    </Avatar>
-                                    <div className="p-4 bg-muted/80 border rounded-2xl rounded-tl-none">
-                                        <div className="flex gap-1 items-center">
-                                            <span className="size-1.5 bg-primary/40 rounded-full animate-bounce"></span>
-                                            <span className="size-1.5 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                                            <span className="size-1.5 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Chat Input */}
-                    <div className="p-4 bg-muted/20 border-t border-primary/5">
-                        <form onSubmit={handleSendMessage} className="flex gap-2">
-                            <Input
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder={`Talk to ${selectedBot.name}...`}
-                                className="flex-1 bg-background/50 border-primary/10 focus-visible:ring-primary shadow-inner"
-                                disabled={isSending}
-                            />
-                            <Button type="submit" size="icon" disabled={!input.trim() || isSending} className="rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-transform">
-                                {isSending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                            </Button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        )
-    }
 
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-700">
@@ -282,7 +132,7 @@ export default function ChatbotPage() {
                 </div>
                 <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button className="gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 hover:scale-105">
+                        <Button className="gap-2 bg-primary shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 hover:scale-105">
                             <Plus className="size-4" />
                             Create New Bot
                         </Button>
@@ -337,7 +187,7 @@ export default function ChatbotPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                     placeholder="Search bots by name or description..."
-                    className="pl-10 max-w-md bg-background/50 border-primary/5 focus-visible:ring-primary/50"
+                    className="pl-10 max-w-md bg-background/50 border-primary/5 focus-visible:ring-primary/50 rounded-xl"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -352,9 +202,9 @@ export default function ChatbotPage() {
             ) : filteredBots.length > 0 ? (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredBots.map((bot) => (
-                        <Card key={bot.id} className="relative overflow-hidden flex flex-col border-primary/10 rounded-2xl shadow-sm bg-background/50">
+                        <Card key={bot.id} className="relative overflow-hidden flex flex-col border-primary/10 rounded-2xl shadow-sm bg-background/50 hover:border-primary/30 transition-all group">
                             <CardHeader className="relative space-y-0">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4 group-hover:scale-110 transition-transform">
                                     <Bot className="size-6" />
                                 </div>
                                 <div className="absolute top-4 right-4">
@@ -366,7 +216,7 @@ export default function ChatbotPage() {
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem className="gap-2">
-                                                <Settings className="size-4" /> Edit Bot
+                                                <Bot className="size-4" /> View Details
                                             </DropdownMenuItem>
                                             <DropdownMenuItem className="gap-2 text-destructive" onClick={() => handleDeleteBot(bot.id)}>
                                                 <Trash2 className="size-4" /> Delete Bot
@@ -387,20 +237,29 @@ export default function ChatbotPage() {
                                     </p>
                                 </div>
                             </CardContent>
-                            <CardFooter className="pt-0">
+                            <CardFooter className="flex flex-col gap-2 pt-0">
                                 <Button
-                                    className="w-full gap-2 rounded-xl shadow-md shadow-primary/10"
-                                    onClick={() => startChat(bot)}
+                                    variant="outline"
+                                    className="w-full gap-2 rounded-xl border-primary/10 hover:bg-primary/5 hover:text-primary transition-all"
+                                    onClick={() => router.push(`/dashboard/chatbot/${bot.id}`)}
+                                >
+                                    <Eye className="size-4" />
+                                    View Details
+                                </Button>
+                                <Button
+                                    className="w-full gap-2 rounded-xl shadow-md shadow-primary/10 bg-primary disabled:opacity-50 disabled:grayscale transition-all"
+                                    disabled={!bot.dataSourceCount || bot.dataSourceCount === 0}
+                                    onClick={() => router.push(`/dashboard/chatbot/${bot.id}/playground`)}
                                 >
                                     <MessageSquare className="size-4" />
-                                    Launch Playground
+                                    {bot.dataSourceCount === 0 ? "No Data Source" : "Launch Playground"}
                                 </Button>
                             </CardFooter>
                         </Card>
                     ))}
                 </div>
             ) : (
-                <div className="flex h-[400px] flex-col items-center justify-center gap-4 text-center bg-muted/20 border-2 border-dashed rounded-3xl border-primary/5">
+                <div className="flex h-[400px] flex-col items-center justify-center gap-4 text-center bg-muted/10 border-2 border-dashed rounded-3xl border-primary/5">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted shadow-inner">
                         <Bot className="size-8 text-muted-foreground/40" />
                     </div>

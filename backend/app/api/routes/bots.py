@@ -41,10 +41,19 @@ async def list_bots(
         where["ownerId"] = owner_id
 
     bots = await db.bot.find_many(
-        where=where, skip=skip, take=take
+        where=where, skip=skip, take=take,
+        include={"dataSources": True}
     )
+    bots_with_count = []
+    for b in bots:
+        count = len(b.dataSources) if b.dataSources else 0
+        # Convert to dict and add the custom field
+        bot_dict = b.model_dump()
+        bot_dict["dataSourceCount"] = count
+        bots_with_count.append(bot_dict)
+        
     total = await db.bot.count(where=where)
-    return {"data": bots, "total": total}
+    return {"data": bots_with_count, "total": total}
 
 
 @router.get("/{bot_id}", response_model=BotWithUserResponse)
@@ -52,10 +61,12 @@ async def get_bot(bot_id: str):
     """Get a single bot by ID with its owner details."""
     bot = await db.bot.find_unique(
         where={"id": bot_id},
-        include={"owner": True}
+        include={"owner": True, "dataSources": True}
     )
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    
+    bot.dataSourceCount = len(bot.dataSources) if bot.dataSources else 0
     return bot
 
 
