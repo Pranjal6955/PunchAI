@@ -37,7 +37,7 @@ const data = {
         },
         {
             title: "Data Source",
-            url: "/dashboard/data-source",
+            url: "/dashboard/datasource",
             icon: Database,
         },
         {

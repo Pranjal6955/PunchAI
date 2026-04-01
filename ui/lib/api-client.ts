@@ -126,18 +126,42 @@ export const datasourceApi = {
     uploadFile: async (botId: string, file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        return apiRequest<any>(`/api/datasources/upload?botId=${botId}`, {
+        formData.append("botId", botId);
+        return apiRequest<any>("/api/datasources/upload", {
             method: "POST",
-            headers: {
-                // Fetch will set the correct boundary for FormData
-                "Content-Type": "",
-            },
             body: formData,
         });
     },
     addUrl: async (botId: string, url: string) => {
-        return apiRequest<any>(`/api/datasources/url?botId=${botId}&url=${encodeURIComponent(url)}`, {
+        return apiRequest<any>("/api/datasources/url", {
             method: "POST",
+            body: JSON.stringify({ botId, url }),
+        });
+    },
+    addFaqs: async (botId: string, name: string, faqs: { question: string; answer: string }[]) => {
+        return apiRequest<any>("/api/datasources/faq", {
+            method: "POST",
+            body: JSON.stringify({ botId, name, faqs }),
+        });
+    },
+    delete: async (dsId: string) => {
+        return apiRequest<any>(`/api/datasources/${dsId}`, {
+            method: "DELETE",
+        });
+    },
+    listFaqs: async (botId: string) => {
+        return apiRequest<any>(`/api/datasources/faqs?botId=${botId}`);
+    },
+    updateFaq: async (faqId: string, payload: { question?: string; answer?: string }) => {
+        return apiRequest<any>(`/api/datasources/faqs/${faqId}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+        });
+    },
+    deleteFaq: async (faqId: string) => {
+        return apiRequest<any>(`/api/datasources/faqs/${faqId}`, {
+            method: "DELETE",
         });
     },
 };
+

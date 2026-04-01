@@ -1,0 +1,1 @@
+1. In chantbot user have to upload data source to use playground
