@@ -1,5 +1,17 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export interface UserCreatePayload {
+    email: string;
+    password: string;
+    name?: string;
+    avatar?: string;
+}
+
+export interface UserLoginPayload {
+    email: string;
+    password: string;
+}
+
 export async function apiRequest<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -22,14 +34,14 @@ export async function apiRequest<T>(
 }
 
 export const authApi = {
-    signup: async (payload: any) => {
-        return apiRequest<any>("/auth/signup", {
+    signup: async (payload: UserCreatePayload) => {
+        return apiRequest<any>("/api/auth/signup", {
             method: "POST",
             body: JSON.stringify(payload),
         });
     },
-    login: async (payload: any) => {
-        return apiRequest<any>("/auth/login", {
+    login: async (payload: UserLoginPayload) => {
+        return apiRequest<any>("/api/auth/login", {
             method: "POST",
             body: JSON.stringify(payload),
         });

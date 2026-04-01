@@ -187,11 +187,24 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
   }
+
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .bg-dot-pattern {
+    background-image: radial-gradient(circle, oklch(0.4 0 0 / 0.3) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .dark .bg-dot-pattern {
+    background-image: radial-gradient(circle, oklch(0.8 0 0 / 0.2) 1px, transparent 1px);
   }
 }

@@ -74,7 +74,7 @@ SECRET_KEY="your-secure-random-string"
 cd backend
 
 # Create & activate environment
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
