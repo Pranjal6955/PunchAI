@@ -222,8 +222,8 @@ export default function ChatbotPage() {
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className={`p-4 rounded-2xl shadow-sm ${m.role === "user"
-                                            ? "bg-primary text-primary-foreground rounded-tr-none"
-                                            : "bg-muted/80 backdrop-blur-sm border rounded-tl-none"
+                                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                                        : "bg-muted/80 backdrop-blur-sm border rounded-tl-none"
                                         }`}>
                                         <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                                         <p className={`text-[10px] mt-2 ${m.role === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
@@ -352,9 +352,9 @@ export default function ChatbotPage() {
             ) : filteredBots.length > 0 ? (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredBots.map((bot) => (
-                        <Card key={bot.id} className="group relative overflow-hidden flex flex-col hover:shadow-2xl hover:shadow-primary/5 transition-all duration-300 border-primary/10 hover:border-primary/30 rounded-2xl">
+                        <Card key={bot.id} className="relative overflow-hidden flex flex-col border-primary/10 rounded-2xl shadow-sm bg-background/50">
                             <CardHeader className="relative space-y-0">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-500 mb-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4">
                                     <Bot className="size-6" />
                                 </div>
                                 <div className="absolute top-4 right-4">
@@ -374,7 +374,7 @@ export default function ChatbotPage() {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
-                                <CardTitle className="text-xl group-hover:text-primary transition-colors">{bot.name}</CardTitle>
+                                <CardTitle className="text-xl transition-colors">{bot.name}</CardTitle>
                                 <CardDescription className="line-clamp-2 mt-2 h-10">
                                     {bot.description || "No description provided"}
                                 </CardDescription>
@@ -389,7 +389,7 @@ export default function ChatbotPage() {
                             </CardContent>
                             <CardFooter className="pt-0">
                                 <Button
-                                    className="w-full gap-2 rounded-xl group-hover:bg-primary group-hover:scale-[1.02] transition-all duration-300 shadow-md shadow-primary/10"
+                                    className="w-full gap-2 rounded-xl shadow-md shadow-primary/10"
                                     onClick={() => startChat(bot)}
                                 >
                                     <MessageSquare className="size-4" />
