@@ -65,7 +65,7 @@ export function LoginForm({
       localStorage.setItem("user", JSON.stringify(response.user))
 
       // Redirect to home/dashboard
-      router.push("/")
+      router.push("/dashboard")
       router.refresh()
     } catch (err: any) {
       setError(err.message || "Invalid credentials. Please try again.")

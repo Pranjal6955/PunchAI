@@ -67,7 +67,7 @@ export function SignupForm({
       localStorage.setItem("user", JSON.stringify(response.user))
 
       // Redirect to home
-      router.push("/")
+      router.push("/dashboard")
       router.refresh()
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.")
@@ -111,7 +111,7 @@ export function SignupForm({
                 <FieldLabel htmlFor="name">Full Name</FieldLabel>
                 <Input
                   id="name"
-                  placeholder="John Doe"
+                  placeholder="Enter Your Full Name"
                   {...register("name")}
                 />
                 {errors.name && (
@@ -119,11 +119,11 @@ export function SignupForm({
                 )}
               </Field>
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">Work Email</FieldLabel>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="Enter Your Email Address"
                   {...register("email")}
                 />
                 {errors.email && (
