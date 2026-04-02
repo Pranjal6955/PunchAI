@@ -34,64 +34,77 @@ export default function DashboardLayout({
 function DashboardContent({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const { title: headerTitle } = useHeader()
-    const pathSegments = pathname.split('/').filter(segment => segment !== '')
+    const realSegments = pathname.split('/').filter(segment => segment !== '')
+
+    // Special Case: Data Source Detail flow override
+    const isBotDataSource = pathname.startsWith("/dashboard/dataSource/") && realSegments.length === 3
+    const displaySegments = isBotDataSource ? ["dataSource", "id"] : realSegments
 
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset>
-                <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex flex-1 items-center justify-between px-4 gap-2">
-                        <div className="flex items-center gap-2">
-                            <SidebarTrigger className="-ml-1" />
-                            <Separator orientation="vertical" className="mr-2 h-4" />
-                            <Breadcrumb>
-                                <BreadcrumbList>
-                                    {pathSegments.map((segment, index) => {
-                                        const href = `/${pathSegments.slice(0, index + 1).join('/')}`
-                                        const isLast = index === pathSegments.length - 1
+            <SidebarInset className="overflow-hidden">
+                <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 backdrop-blur-md px-4 pr-6 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-14">
+                    <div className="flex flex-1 items-center gap-2 overflow-hidden">
+                        <SidebarTrigger className="-ml-1" />
+                        <Breadcrumb className="hidden md:block">
+                            <BreadcrumbList>
+                                <BreadcrumbItem>
+                                    <BreadcrumbLink href="/dashboard">Home</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator />
+                                {displaySegments.map((segment, index) => {
+                                    const isLast = index === displaySegments.length - 1
 
-                                        let title = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/([A-Z])/g, ' $1').trim()
-                                        if (segment === "dashboard") title = "Overview"
-                                        if (segment === "chatbot") title = "Chatbots"
-                                        if (segment === "dataSource") title = "Data Sources"
+                                    // Map Href
+                                    let href = ""
+                                    if (isBotDataSource) {
+                                        href = index === 0 ? "/dashboard/dataSource" : pathname
+                                    } else {
+                                        href = `/${realSegments.slice(0, index + 1).join('/')}`
+                                    }
 
-                                        const isBotID = index === 2 && pathSegments[1]?.toLowerCase() === "chatbot"
-                                        if (isBotID && headerTitle) {
-                                            title = headerTitle
-                                        } else if (segment.length > 20 && headerTitle) {
-                                            title = headerTitle
-                                        } else if (isBotID || segment.length > 20) {
-                                            title = "Details"
-                                        }
+                                    // Map Title
+                                    let title = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/([A-Z])/g, ' $1').trim()
+                                    if (segment === "dashboard") title = "Overview"
+                                    if (segment === "chatbot") title = "Chatbots"
+                                    if (segment === "dataSource") title = "Data Sources"
 
-                                        return (
-                                            <React.Fragment key={href}>
-                                                <BreadcrumbItem className={index === 0 ? "hidden md:block" : ""}>
-                                                    {isLast ? (
-                                                        <BreadcrumbPage className="font-semibold">{title}</BreadcrumbPage>
-                                                    ) : (
-                                                        <BreadcrumbLink href={href}>
-                                                            {title}
-                                                        </BreadcrumbLink>
-                                                    )}
-                                                </BreadcrumbItem>
-                                                {!isLast && <BreadcrumbSeparator className="hidden md:block" />}
-                                            </React.Fragment>
-                                        )
-                                    })}
-                                </BreadcrumbList>
-                            </Breadcrumb>
-                        </div>
+                                    // Special segment handling for overrides (Data Source Flow)
+                                    if (segment === "id" && headerTitle) {
+                                        title = headerTitle
+                                    } else if (segment === "id") {
+                                        title = "Details"
+                                    } else if (segment.length > 20 && headerTitle) {
+                                        title = headerTitle
+                                    }
 
-                        <div className="flex items-center gap-2 ml-auto">
-                            {/* Header Actions Placeholder */}
-                            <div className="hidden md:flex items-center px-3 h-9 rounded-md border border-input bg-background/50 text-muted-foreground text-sm cursor-text hover:bg-background/80 transition-colors mr-2">
-                                <span className="mr-8">Search chatbots...</span>
-                                <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
-                                    <span className="text-xs">⌘</span>K
-                                </kbd>
-                            </div>
+                                    return (
+                                        <React.Fragment key={`${index}-${segment}`}>
+                                            <BreadcrumbItem>
+                                                {isLast ? (
+                                                    <BreadcrumbPage className="font-semibold">{title}</BreadcrumbPage>
+                                                ) : (
+                                                    <BreadcrumbLink href={href}>
+                                                        {title}
+                                                    </BreadcrumbLink>
+                                                )}
+                                            </BreadcrumbItem>
+                                            {!isLast && <BreadcrumbSeparator />}
+                                        </React.Fragment>
+                                    )
+                                })}
+                            </BreadcrumbList>
+                        </Breadcrumb>
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                        {/* Header Actions Placeholder */}
+                        <div className="hidden md:flex items-center px-3 h-9 rounded-md border border-input bg-background/50 text-muted-foreground text-sm cursor-text hover:bg-background/80 transition-colors mr-2">
+                            <span className="mr-8">Search chatbots...</span>
+                            <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
+                                <span className="text-xs">⌘</span>K
+                            </kbd>
                         </div>
                     </div>
                 </header>

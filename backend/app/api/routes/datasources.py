@@ -15,6 +15,8 @@ from app.schemas.datasource import (
     FAQSourceCreate,
     FAQResponse,
     FAQUpdate,
+    ChunkResponse,
+    ChunkUpdate,
 )
 from app.api.deps import get_current_user
 from app.utils.extractor import extract_text_from_pdf, extract_text_from_url, clean_faq_text, format_faqs_to_text
@@ -172,4 +174,40 @@ async def delete_datasource(ds_id: str, current_user=Depends(get_current_user)):
         os.remove(ds.fileUrl)
 
     await db.datasource.delete(where={"id": ds_id})
+    return None
+
+
+@router.get("/chunks/{ds_id}", response_model=List[ChunkResponse])
+async def list_source_chunks(ds_id: str, current_user=Depends(get_current_user)):
+    ds = await db.datasource.find_unique(where={"id": ds_id}, include={"bot": True})
+    if not ds or ds.bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    return await db.documentchunk.find_many(where={"sourceId": ds_id}, order={"createdAt": "asc"})
+
+
+@router.patch("/chunks/{chunk_id}", response_model=ChunkResponse)
+async def update_chunk(chunk_id: str, payload: ChunkUpdate, current_user=Depends(get_current_user)):
+    chunk = await db.documentchunk.find_unique(where={"id": chunk_id}, include={"bot": True})
+    if not chunk or chunk.bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    # update in DB
+    updated = await db.documentchunk.update(where={"id": chunk_id}, data={"content": payload.content})
+    
+    # Ideally, we should re-sync with Chroma here. 
+    # For now, we'll just update the SQL record which is used for keyword search.
+    # To re-sync Chroma properly, we'd need to re-index the whole source since one chunk update 
+    # affects the text splitter's output for the whole raw text.
+    
+    return updated
+
+
+@router.delete("/chunks/{chunk_id}", status_code=204)
+async def delete_chunk(chunk_id: str, current_user=Depends(get_current_user)):
+    chunk = await db.documentchunk.find_unique(where={"id": chunk_id}, include={"bot": True})
+    if not chunk or chunk.bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    await db.documentchunk.delete(where={"id": chunk_id})
     return None

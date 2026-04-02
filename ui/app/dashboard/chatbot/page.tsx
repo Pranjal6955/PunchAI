@@ -302,10 +302,13 @@ export default function ChatbotPage() {
                                 </Button>
                                 <Button
                                     variant="outline"
+                                    asChild
                                     size="sm"
                                     className="h-8 px-3 text-xs gap-1.5 border-border/50"
                                 >
-                                    <MessageSquare className="h-4 w-4" /> Chat
+                                    <Link href={`/dashboard/chatbot/${bot.id}/playground`}>
+                                        <MessageSquare className="h-4 w-4" /> Simulator
+                                    </Link>
                                 </Button>
                             </div>
                         </Card>

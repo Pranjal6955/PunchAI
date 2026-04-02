@@ -12,6 +12,7 @@ from app.schemas.chat import (
     ChatListResponse,
     MessageResponse,
 )
+from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_ollama_response
@@ -34,9 +35,10 @@ async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user
             "title": payload.title or f"Chat with {bot.name}",
             "user": {"connect": {"id": payload.userId}},
             "bot": {"connect": {"id": payload.botId}},
-        }
+        },
+        include={"messages": True}
     )
-    return {**chat, "messages": []}
+    return chat
 
 
 # ── FULL RAG FLOW: CHAT -> RETRIEVE -> PROMPT -> LLM ──
@@ -70,7 +72,7 @@ async def add_message(
     context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=payload.content, top_k=5)
     
     # Optional: Log the retrieved context into the user's message metadata
-    await db.message.update(where={"id": user_msg.id}, data={"metadata": {"chunks": context_chunks}})
+    await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
 
     # 3. LLM Generation (Ollama local)
     prompt = build_rag_prompt(
@@ -87,7 +89,7 @@ async def add_message(
             "role": "ASSISTANT",
             "content": ai_text,
             "chat": {"connect": {"id": chat_id}},
-            "metadata": {"source_chunks": len(context_chunks)}
+            "metadata": Json({"source_chunks": len(context_chunks)})
         }
     )
 

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Bot, Database, MessageSquare, Settings, Share2, Trash2, Calendar, Edit, Save, X } from "lucide-react"
+import { ArrowLeft, Bot, Database, MessageSquare, Settings, Share2, Trash2, Calendar, Edit, Save, X, Link } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -235,8 +235,10 @@ export default function BotDetailsPage() {
                                 <p className="text-xs text-muted-foreground mb-4 text-center max-w-[300px]">
                                     Upload documents, link URLs or connect databases to train your chatbot.
                                 </p>
-                                <Button variant="outline" size="sm" className="gap-2">
-                                    <Database className="h-3.5 w-3.5" /> Manage Data Sources
+                                <Button variant="outline" size="sm" className="gap-2" asChild>
+                                    <Link href={`/dashboard/dataSource/${botId}`}>
+                                        <Database className="h-3.5 w-3.5" /> Manage Data Sources
+                                    </Link>
                                 </Button>
                             </div>
                         </CardContent>
