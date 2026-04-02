@@ -66,8 +66,10 @@ async def get_bot(bot_id: str):
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
     
-    bot.dataSourceCount = len(bot.dataSources) if bot.dataSources else 0
-    return bot
+    # Manually adding non-persistent field for Response Schema
+    bot_dict = bot.model_dump()
+    bot_dict["dataSourceCount"] = len(bot.dataSources) if bot.dataSources else 0
+    return bot_dict
 
 
 @router.patch("/{bot_id}", response_model=BotResponse)

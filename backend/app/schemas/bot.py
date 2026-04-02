@@ -4,6 +4,7 @@ Pydantic schemas for Bot endpoints.
 
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 from app.schemas.user import UserResponse
 
 
@@ -31,6 +32,8 @@ class BotResponse(BaseModel):
     botPersona: Optional[str] = None
     ownerId: str
     dataSourceCount: Optional[int] = 0
+    createdAt: datetime
+    updatedAt: datetime
 
     model_config = {"from_attributes": True}
 
