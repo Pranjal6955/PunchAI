@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, FormProvider } from "react-hook-form"
 import * as z from "zod"
 import { SignupForm } from "@/components/signup-form"
+import { authApi } from "@/lib/api-client"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 const signupSchema = z.object({
     firstName: z.string().min(2, "First name must be at least 2 characters"),
@@ -15,6 +18,7 @@ const signupSchema = z.object({
 type SignupFormValues = z.infer<typeof signupSchema>
 
 export default function SignupPage() {
+    const router = useRouter()
     const methods = useForm<SignupFormValues>({
         resolver: zodResolver(signupSchema),
         defaultValues: {
@@ -27,8 +31,26 @@ export default function SignupPage() {
 
     const { handleSubmit, formState: { isSubmitting } } = methods
 
-    function onSubmit(values: SignupFormValues) {
-        console.log("Signup values:", values)
+    async function onSubmit(values: SignupFormValues) {
+        try {
+            const response = await authApi.signup({
+                email: values.email,
+                password: values.password,
+                name: `${values.firstName} ${values.lastName}`.trim(),
+            });
+
+            // Store token
+            localStorage.setItem("accessToken", response.accessToken);
+            localStorage.setItem("user", JSON.stringify(response.user));
+
+            toast.success("Account created successfully! Welcome to PunchAI.");
+
+            router.push("/dashboard");
+            router.refresh();
+        } catch (error: any) {
+            toast.error(error.message || "Something went wrong. Please try again.");
+            console.error("Signup error:", error);
+        }
     }
 
     return (

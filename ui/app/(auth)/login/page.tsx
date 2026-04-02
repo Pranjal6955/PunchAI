@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, FormProvider } from "react-hook-form"
 import * as z from "zod"
 import { LoginForm } from "@/components/login-form"
+import { authApi } from "@/lib/api-client"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 const loginSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -14,6 +17,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
+    const router = useRouter()
     const methods = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
@@ -25,8 +29,25 @@ export default function LoginPage() {
 
     const { handleSubmit, formState: { isSubmitting } } = methods
 
-    function onSubmit(values: LoginFormValues) {
-        console.log("Login values:", values)
+    async function onSubmit(values: LoginFormValues) {
+        try {
+            const response = await authApi.login({
+                email: values.email,
+                password: values.password,
+            });
+
+            // Store token
+            localStorage.setItem("accessToken", response.accessToken);
+            localStorage.setItem("user", JSON.stringify(response.user));
+
+            toast.success("Login successful! Redirecting...");
+
+            router.push("/dashboard");
+            router.refresh();
+        } catch (error: any) {
+            toast.error(error.message || "Invalid credentials. Please try again.");
+            console.error("Login error:", error);
+        }
     }
 
     return (
