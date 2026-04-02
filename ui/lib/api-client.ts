@@ -33,3 +33,19 @@ export const authApi = {
     }),
     getMe: () => apiRequest("/auth/me"),
 };
+
+export const botApi = {
+    list: (ownerId?: string) => apiRequest(`/bots${ownerId ? `?ownerId=${ownerId}` : ""}`),
+    create: (data: { name: string; description?: string; botPersona?: string; ownerId: string }) => apiRequest("/bots", {
+        method: "POST",
+        body: JSON.stringify(data),
+    }),
+    get: (id: string) => apiRequest(`/bots/${id}`),
+    update: (id: string, data: { name?: string; description?: string; botPersona?: string }) => apiRequest(`/bots/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+    }),
+    delete: (id: string) => apiRequest(`/bots/${id}`, {
+        method: "DELETE",
+    }),
+};
