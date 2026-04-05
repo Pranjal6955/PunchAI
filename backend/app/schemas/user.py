@@ -21,17 +21,6 @@ class UserLogin(BaseModel):
     password: str
 
 
-class TokenResponse(BaseModel):
-    accessToken: str
-    tokenType: str = "bearer"
-    user: UserResponse
-
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    avatar: Optional[str] = None
-
-
 # ── Response Schemas ──
 
 class UserResponse(BaseModel):
@@ -43,6 +32,17 @@ class UserResponse(BaseModel):
     updatedAt: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TokenResponse(BaseModel):
+    accessToken: str
+    tokenType: str = "bearer"
+    user: UserResponse
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar: Optional[str] = None
 
 
 class UserListResponse(BaseModel):

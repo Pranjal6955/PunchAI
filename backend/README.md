@@ -1,6 +1,6 @@
 # PunchAI Backend (RAG Engine)
 
-A high-performance **Retrieval-Augmented Generation (RAG)** backend built with **FastAPI**, **Prisma Client Python**, **ChromaDB**, and **Ollama**.
+A high-performance **Retrieval-Augmented Generation (RAG)** backend built with **FastAPI**, **Prisma Client Python**, **ChromaDB**, and **OpenRouter**.
 
 ---
 
@@ -10,6 +10,7 @@ A high-performance **Retrieval-Augmented Generation (RAG)** backend built with *
 backend/
 ├── chroma_db/             # Persistent Vector Database
 ├── uploads/               # Local PDF storage (for indexing)
+├── tests/                 # Automated Test Cases (Pytest)
 ├── prisma/
 │   └── schema.prisma      # DB Schema (User, Bot, Faq, DocumentChunk, Chat)
 ├── app/
@@ -29,7 +30,7 @@ backend/
 │   │       └── health.py  # Service Health Check
 │   ├── services/
 │   │   ├── processor.py   # Clean -> Chunk -> Embed -> Store Pipeline
-│   │   └── llm.py         # Local LLM (Ollama) Interface
+│   │   └── llm.py         # Cloud LLM (OpenRouter) Interface
 │   ├── utils/
 │   │   └── extractor.py   # Specialized Text Extractors
 │   ├── schemas/           # Pydantic Data Models
@@ -47,7 +48,7 @@ backend/
 3.  **Store Raw**: Full text is archived in **Neon PostgreSQL** for reference.
 4.  **Index**: Text is chunked (1000 chars) and embedded using **SentenceTransformers** into **ChromaDB**.
 5.  **Query**: On user message, the most relevant context is retrieved from ChromaDB.
-6.  **Generate**: Context + Bot Persona + User Query are sent to **Local Ollama (Llama 3)** to produce a grounded response.
+6.  **Generate**: Context + Bot Persona + User Query are sent to **OpenRouter** to produce a grounded response.
 
 ---
 
@@ -57,7 +58,7 @@ backend/
 
 - **Python 3.11+**
 - **Neon PostgreSQL URL** (Get it at [neon.tech](https://neon.tech))
-- **Ollama** installed locally (Get it at [ollama.com](https://ollama.com))
+- **OpenRouter API Key** (Get it at [openrouter.ai](https://openrouter.ai))
 
 ### 2. Environment Configuration
 
@@ -65,6 +66,8 @@ Copy `.env.example` to `.env` and fill in:
 ```env
 DATABASE_URL="postgresql://neondb_owner:<password>@<host>.neon.tech/neondb?sslmode=require"
 SECRET_KEY="your-secure-random-string"
+OPENROUTER_API_KEY="sk-or-v1-..."
+OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
 ```
 
 ### 3. Install & Initialize
@@ -73,7 +76,7 @@ SECRET_KEY="your-secure-random-string"
 cd backend
 
 # Create & activate environment
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
@@ -82,9 +85,6 @@ pip install -r requirements.txt
 # Sync database & generate Prisma client
 prisma db push
 prisma generate
-
-# Pull your LLM model
-ollama pull llama3
 ```
 
 ### 4. Run Server
@@ -93,6 +93,21 @@ ollama pull llama3
 uvicorn app.main:app --reload --port 8000
 ```
 Visit **http://localhost:8000/docs** for the Swagger UI.
+
+### 5. Running Tests
+
+The project uses `pytest` for automated integration testing.
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_auth.py
+
+# Run with output
+pytest -v
+```
 
 ---
 

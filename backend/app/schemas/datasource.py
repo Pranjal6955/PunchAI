@@ -62,3 +62,19 @@ class DataSourceResponse(BaseModel):
 class DataSourceListResponse(BaseModel):
     data: list[DataSourceResponse]
     total: int
+
+
+# ── Chunk Management (Extracted Data) ──
+
+class ChunkUpdate(BaseModel):
+    content: str
+
+
+class ChunkResponse(BaseModel):
+    id: str
+    content: str
+    sourceId: str
+    botId: str
+    createdAt: datetime
+
+    model_config = {"from_attributes": True}

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     # ── CORS ──
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
+    # ── OpenRouter ──
+    OPENROUTER_API_KEY: str = "sk-or-v1-..."
+    OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct"
+
+    # ── Groq ──
+    GROQ_API_KEY: str = "gsk_..."
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]

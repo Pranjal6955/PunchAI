@@ -14,16 +14,12 @@ router = APIRouter(prefix="/bots", tags=["Bots"])
 @router.post("/", response_model=BotResponse, status_code=201)
 async def create_bot(payload: BotCreate, current_user=Depends(get_current_user)):
     """Create a new bot/agent."""
-    # Ensure user can only create bots for themselves or check if owner exists
-    if payload.ownerId != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to create bot for another user")
-
     bot = await db.bot.create(
         data={
             "name": payload.name,
             "description": payload.description,
             "botPersona": payload.botPersona,
-            "owner": {"connect": {"id": payload.ownerId}},
+            "owner": {"connect": {"id": current_user.id}},
         }
     )
     return bot
@@ -41,10 +37,19 @@ async def list_bots(
         where["ownerId"] = owner_id
 
     bots = await db.bot.find_many(
-        where=where, skip=skip, take=take
+        where=where, skip=skip, take=take,
+        include={"dataSources": True}
     )
+    bots_with_count = []
+    for b in bots:
+        count = len(b.dataSources) if b.dataSources else 0
+        # Convert to dict and add the custom field
+        bot_dict = b.model_dump()
+        bot_dict["dataSourceCount"] = count
+        bots_with_count.append(bot_dict)
+        
     total = await db.bot.count(where=where)
-    return {"data": bots, "total": total}
+    return {"data": bots_with_count, "total": total}
 
 
 @router.get("/{bot_id}", response_model=BotWithUserResponse)
@@ -52,11 +57,15 @@ async def get_bot(bot_id: str):
     """Get a single bot by ID with its owner details."""
     bot = await db.bot.find_unique(
         where={"id": bot_id},
-        include={"owner": True}
+        include={"owner": True, "dataSources": True}
     )
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
-    return bot
+    
+    # Manually adding non-persistent field for Response Schema
+    bot_dict = bot.model_dump()
+    bot_dict["dataSourceCount"] = len(bot.dataSources) if bot.dataSources else 0
+    return bot_dict
 
 
 @router.patch("/{bot_id}", response_model=BotResponse)

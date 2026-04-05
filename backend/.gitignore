@@ -15,3 +15,7 @@ Thumbs.db
 
 # Prisma
 node_modules/
+
+# Local generated data
+chroma_db/
+uploads/
