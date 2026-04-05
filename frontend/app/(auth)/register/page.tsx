@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -117,23 +118,23 @@ export default function RegisterPage() {
           <div className="mx-auto w-full max-w-lg space-y-8">
             <div className="space-y-6">
               <div className="inline-flex w-fit border border-border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-pulse [animation-duration:3s]">
-                Perks Studio • New Workspace
+                Punch Studio • New Account
               </div>
 
               <div className="space-y-3 motion-safe:animate-pulse [animation-duration:5s]">
                 <h1 className="text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">
-                  Create your API lab
-                  <span className="block text-muted-foreground">and start testing in minutes</span>
+                  Deploy your first AI agent
+                  <span className="block text-muted-foreground">and integrate in minutes</span>
                 </h1>
                 <p className="max-w-md text-sm text-muted-foreground">
-                  Set up collections, environments, and reusable requests for faster API development.
+                  An webapp for Chatbot as a Service where user can customize and integrate to his website.
                 </p>
               </div>
 
               <ul className="space-y-3 text-sm">
-                <li className="border-l-2 border-foreground/70 pl-3">Organize endpoints by project and version</li>
-                <li className="border-l-2 border-foreground/50 pl-3">Share saved requests with your team</li>
-                <li className="border-l-2 border-foreground/30 pl-3">Validate response data with less effort</li>
+                <li className="border-l-2 border-foreground/70 pl-3">Design custom personas and chat behaviors</li>
+                <li className="border-l-2 border-foreground/50 pl-3">Train your bots with custom knowledge bases</li>
+                <li className="border-l-2 border-foreground/30 pl-3">Seamlessly integrate with just a line of code</li>
               </ul>
 
               <div className="grid grid-cols-2 border border-border text-center text-sm motion-safe:animate-pulse [animation-duration:4s]">
@@ -149,17 +150,28 @@ export default function RegisterPage() {
             </div>
 
             <div className="border-t border-border pt-4 text-xs text-muted-foreground">
-              Start free and scale to collaborative API workflows anytime.
+              Start building your AI presence with Punch Studio today.
             </div>
           </div>
         </section>
 
         <section className="flex min-h-0 justify-center overflow-y-auto p-4 sm:p-6 lg:p-10">
-          <div className="my-auto w-full max-w-md">
+          <div className="my-auto w-full max-w-md space-y-6">
+            <div className="flex items-center justify-center gap-3">
+              <Image
+                src="/Logo_dark_theme.png"
+                alt="PunchAI Logo"
+                width={150}
+                height={40}
+                className="h-8 w-auto object-contain"
+                priority
+              />
+              <span className="text-2xl font-bold tracking-tight">Punch Studio</span>
+            </div>
             <Card className="w-full max-h-full overflow-y-auto rounded-none border-border/60 bg-background/95 shadow-none">
               <CardHeader className="space-y-2">
                 <CardTitle className="text-2xl tracking-tight">Register</CardTitle>
-                <CardDescription>Create your Perks Studio account to start testing APIs interactively.</CardDescription>
+                <CardDescription>Create your Punch Studio account to start building chatbots.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={onSubmit} className="space-y-4">

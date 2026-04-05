@@ -5,30 +5,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Play, Search, Command, FolderOpen, Loader2, Database, Settings2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { getProjects, Project } from "@/lib/api-session";
+import { getBots, Bot } from "@/lib/api-session";
 import { CreateApiDialog } from "@/components/create-api-dialog";
 
 export default function WorkspacePage() {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [selectedProject, setSelectedProject] = useState<string>();
+    const [bots, setBots] = useState<Bot[]>([]);
+    const [selectedBot, setSelectedBot] = useState<string>();
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const fetchProjects = async () => {
+        const fetchBots = async () => {
             setIsLoading(true);
             try {
-                const data = await getProjects();
-                setProjects(data);
-                if (data.length > 0 && !selectedProject) {
-                    setSelectedProject(data[0]._id);
+                const data = await getBots();
+                setBots(data);
+                if (data.length > 0 && !selectedBot) {
+                    setSelectedBot(data[0].id);
                 }
             } catch (error) {
-                console.error("Failed to fetch projects:", error);
+                console.error("Failed to fetch chatbots:", error);
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchProjects();
+        fetchBots();
     }, []);
 
     return (
@@ -41,14 +41,14 @@ export default function WorkspacePage() {
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
                     <div className="space-y-1.5 text-left">
-                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">API Workspace</h1>
+                        <h1 className="text-4xl font-semibold tracking-tight text-foreground">Data Source</h1>
                         <p className="text-muted-foreground text-lg max-w-2xl leading-relaxed">
                             Monitor live traffic, test endpoints, and debug request/response cycles in real-time.
                         </p>
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <Select value={selectedProject} onValueChange={setSelectedProject}>
+                        <Select value={selectedBot} onValueChange={setSelectedBot}>
                             <SelectTrigger className="w-[240px] h-11 rounded-none border-border/60 bg-background/50 backdrop-blur-md px-4 hover:border-primary/30 transition-all shadow-xl shadow-primary/5">
                                 <div className="flex items-center gap-2.5">
                                     {isLoading ? (
@@ -56,21 +56,21 @@ export default function WorkspacePage() {
                                     ) : (
                                         <FolderOpen className="size-4 text-primary" />
                                     )}
-                                    <SelectValue placeholder={isLoading ? "Loading..." : "Select Project"} />
+                                    <SelectValue placeholder={isLoading ? "Loading..." : "Select Chatbot"} />
                                 </div>
                             </SelectTrigger>
                             <SelectContent className="rounded-none border-border/60 bg-background/95 backdrop-blur-xl">
-                                {projects.length === 0 && !isLoading ? (
-                                    <div className="p-4 text-xs text-muted-foreground text-center">No projects found</div>
+                                {bots.length === 0 && !isLoading ? (
+                                    <div className="p-4 text-xs text-muted-foreground text-center">No chatbots found</div>
                                 ) : (
-                                    projects.map((project) => (
+                                    bots.map((bot) => (
                                         <SelectItem
-                                            key={project._id}
-                                            value={project._id}
+                                            key={bot.id}
+                                            value={bot.id}
                                             className="rounded-none focus:bg-primary/10 focus:text-primary"
                                         >
                                             <div className="flex flex-col">
-                                                <span className="font-medium">{project.name}</span>
+                                                <span className="font-medium">{bot.name}</span>
                                             </div>
                                         </SelectItem>
                                     ))
@@ -78,7 +78,7 @@ export default function WorkspacePage() {
                             </SelectContent>
                         </Select>
 
-                        <CreateApiDialog projectId={selectedProject} />
+                        <CreateApiDialog botId={selectedBot} />
                     </div>
                 </div>
 

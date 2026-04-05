@@ -23,8 +23,8 @@ export function DashboardHeader() {
     // Base dashboard link
     breadcrumbs.push({ label: "Dashboard", href: "/dashboard", current: segments.length === 1 });
 
-    if (segments.includes("Project")) {
-      breadcrumbs.push({ label: "Projects", href: "/dashboard/Project", current: true });
+    if (segments.includes("chatbots")) {
+      breadcrumbs.push({ label: "Chatbots", href: "/dashboard/chatbots", current: true });
     }
 
     return breadcrumbs;

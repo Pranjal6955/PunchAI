@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -97,23 +98,23 @@ export default function LoginPage() {
           <div className="mx-auto w-full max-w-lg space-y-8">
             <div className="space-y-6">
               <div className="inline-flex w-fit border border-border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground motion-safe:animate-pulse [animation-duration:3s]">
-                Perks Studio • Welcome Back
+                Punch Studio • Welcome Back
               </div>
 
               <div className="space-y-3 motion-safe:animate-pulse [animation-duration:5s]">
                 <h1 className="text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">
-                  Continue API testing
+                  Continue building chatbots
                   <span className="block text-muted-foreground">right where you left off</span>
                 </h1>
                 <p className="max-w-md text-sm text-muted-foreground">
-                  Open saved collections, rerun scenarios, and review response history in one workspace.
+                  Access your chatbots, manage knowledge bases, and refine conversations in one workspace.
                 </p>
               </div>
 
               <ul className="space-y-3 text-sm">
-                <li className="border-l-2 border-foreground/70 pl-3">Resume test runs with saved variables</li>
-                <li className="border-l-2 border-foreground/50 pl-3">Track status codes and payload changes</li>
-                <li className="border-l-2 border-foreground/30 pl-3">Collaborate faster with shared environments</li>
+                <li className="border-l-2 border-foreground/70 pl-3">Deploy custom chatbots to any website</li>
+                <li className="border-l-2 border-foreground/50 pl-3">Manage and refine AI knowledge bases</li>
+                <li className="border-l-2 border-foreground/30 pl-3">Monitor real-time chat interactions</li>
               </ul>
 
               <div className="grid grid-cols-2 border border-border text-center text-sm motion-safe:animate-pulse [animation-duration:4s]">
@@ -122,8 +123,8 @@ export default function LoginPage() {
                   <p className="text-xs text-muted-foreground">Access to your workspace</p>
                 </div>
                 <div className="p-4">
-                  <p className="text-xl font-semibold">Instant</p>
-                  <p className="text-xs text-muted-foreground">Request replay</p>
+                  <p className="text-xl font-semibold">24/7</p>
+                  <p className="text-xs text-muted-foreground">Bot Availability</p>
                 </div>
               </div>
             </div>
@@ -135,11 +136,22 @@ export default function LoginPage() {
         </section>
 
         <section className="flex min-h-0 justify-center overflow-y-auto p-4 sm:p-6 lg:p-10">
-          <div className="my-auto w-full max-w-md">
+          <div className="my-auto w-full max-w-md space-y-6">
+            <div className="flex items-center justify-center gap-3">
+              <Image
+                src="/Logo_dark_theme.png"
+                alt="PunchAI Logo"
+                width={150}
+                height={40}
+                className="h-8 w-auto object-contain"
+                priority
+              />
+              <span className="text-2xl font-bold tracking-tight">Punch Studio</span>
+            </div>
             <Card className="w-full max-h-full overflow-y-auto rounded-none border-border/60 bg-background/95 shadow-none">
               <CardHeader className="space-y-2">
                 <CardTitle className="text-2xl tracking-tight">Sign in</CardTitle>
-                <CardDescription>Access your Perks Studio workspace.</CardDescription>
+                <CardDescription>Access your Punch Studio workspace.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={onSubmit} className="space-y-4">

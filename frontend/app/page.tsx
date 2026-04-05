@@ -12,7 +12,7 @@ export default function Home() {
 
       <div className="flex flex-col items-center text-center max-w-2xl gap-4">
         <h1 className="text-4xl font-bold tracking-tight text-foreground underline underline-offset-8 decoration-primary/30">
-          Welcome to Perks Studio
+          Welcome to Punch Studio
         </h1>
         <p className="text-lg text-muted-foreground">
           This page utilizes various <Badge variant="secondary">shadcn/ui</Badge> components to test the global CSS variables.

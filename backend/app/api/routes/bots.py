@@ -14,16 +14,12 @@ router = APIRouter(prefix="/bots", tags=["Bots"])
 @router.post("/", response_model=BotResponse, status_code=201)
 async def create_bot(payload: BotCreate, current_user=Depends(get_current_user)):
     """Create a new bot/agent."""
-    # Ensure user can only create bots for themselves or check if owner exists
-    if payload.ownerId != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to create bot for another user")
-
     bot = await db.bot.create(
         data={
             "name": payload.name,
             "description": payload.description,
             "botPersona": payload.botPersona,
-            "owner": {"connect": {"id": payload.ownerId}},
+            "owner": {"connect": {"id": current_user.id}},
         }
     )
     return bot

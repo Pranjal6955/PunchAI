@@ -14,7 +14,7 @@ class BotCreate(BaseModel):
     name: str
     description: Optional[str] = None
     botPersona: Optional[str] = None
-    ownerId: str
+    ownerId: Optional[str] = None
 
 
 class BotUpdate(BaseModel):

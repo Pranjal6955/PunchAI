@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, Bell, ChevronsUpDown, CreditCard, FolderKanban, GalleryVerticalEnd, LayoutDashboard, LogOut, Sparkles, Zap } from "lucide-react";
+import Image from "next/image";
+import { BadgeCheck, Bell, ChevronsUpDown, CreditCard, Database, DatabaseBackupIcon, FolderKanban, LayoutDashboard, LogOut, Sparkles, Zap } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -58,13 +59,13 @@ export function DashboardSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" asChild className="group-data-[collapsible=icon]:justify-center">
               <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <GalleryVerticalEnd className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden">
+                  <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={32} height={32} priority />
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold uppercase tracking-wider">Perks Studio</span>
+                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                  <span className="truncate font-semibold uppercase tracking-wider">Punch Studio</span>
                   <span className="truncate text-xs text-muted-foreground">Workspace</span>
                 </div>
               </Link>
@@ -86,18 +87,18 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/Project")} tooltip="Projects">
-                <Link href="/dashboard/Project">
+              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/chatbots")} tooltip="Chatbots">
+                <Link href="/dashboard/chatbots">
                   <FolderKanban />
-                  <span>Projects</span>
+                  <span>Chatbots</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === "/dashboard/workspace"} tooltip="API Workspace">
+              <SidebarMenuButton asChild isActive={pathname === "/dashboard/workspace"} tooltip="Data Source">
                 <Link href="/dashboard/workspace">
-                  <Zap className="size-4" />
-                  <span>API Workspace</span>
+                  <DatabaseBackupIcon className="size-4" />
+                  <span>Data Source</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

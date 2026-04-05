@@ -1,4 +1,4 @@
-# PerksAI UI Design System
+# Punch Studio UI Design System
 
 ## 1) Core Principles
 - Use **shadcn/ui** components as the default building blocks.

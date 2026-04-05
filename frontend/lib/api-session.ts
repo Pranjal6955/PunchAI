@@ -1,5 +1,4 @@
 const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-
 const buildApiUrl = (path: string) => (apiBase ? `${apiBase}${path}` : path);
 
 export const getStoredAccessToken = () => {
@@ -88,15 +87,15 @@ export const authorizedFetch = async (
   return response;
 };
 
-export interface Project {
-  _id: string;
+export interface Bot {
+  id: string;
   name: string;
   description?: string;
-  apiType: string;
-  role: string;
+  botPersona?: string;
+  ownerId: string;
+  dataSourceCount?: number;
   createdAt: string;
-  createdBy: string;
-  joinedAt?: string;
+  updatedAt: string;
 }
 
 export interface User {
@@ -117,25 +116,25 @@ export const logoutSession = async (): Promise<void> => {
   }
 };
 
-export const getProjects = async (): Promise<Project[]> => {
-  const res = await authorizedFetch("/api/projects");
+export const getBots = async (): Promise<Bot[]> => {
+  const res = await authorizedFetch("/api/bots");
   if (!res.ok) return [];
-  const data = await parseJsonSafely<Project[]>(res);
-  return data || [];
+  const data = await parseJsonSafely<{ data: Bot[]; total: number }>(res);
+  return data?.data || [];
 };
 
-export const getProject = async (projectId: string): Promise<Project | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`);
+export const getBot = async (botId: string): Promise<Bot | null> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`);
   if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
+  return await parseJsonSafely<Bot>(res);
 };
 
-export const createProject = async (data: {
+export const createBot = async (data: {
   name: string;
   description?: string;
-  apiType: string;
-}): Promise<Project | null> => {
-  const res = await authorizedFetch("/api/projects", {
+  botPersona?: string;
+}): Promise<Bot | null> => {
+  const res = await authorizedFetch("/api/bots", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -143,18 +142,18 @@ export const createProject = async (data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
+  return await parseJsonSafely<Bot>(res);
 };
 
-export const updateProject = async (
-  projectId: string,
+export const updateBot = async (
+  botId: string,
   data: {
     name?: string;
     description?: string;
-    apiType?: string;
+    botPersona?: string;
   }
-): Promise<Project | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`, {
+): Promise<Bot | null> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -162,11 +161,11 @@ export const updateProject = async (
     body: JSON.stringify(data),
   });
   if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
+  return await parseJsonSafely<Bot>(res);
 };
 
-export const deleteProject = async (projectId: string): Promise<boolean> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`, {
+export const deleteBot = async (botId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`, {
     method: "DELETE",
   });
   return res.ok;
@@ -174,7 +173,7 @@ export const deleteProject = async (projectId: string): Promise<boolean> => {
 
 export interface Member {
   _id: string;
-  projectId: string;
+  botId: string;
   userId: {
     _id: string;
     name: string;
@@ -184,19 +183,19 @@ export interface Member {
   joinedAt: string;
 }
 
-export const listMembers = async (projectId: string): Promise<Member[]> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/members`);
+export const listMembers = async (botId: string): Promise<Member[]> => {
+  const res = await authorizedFetch(`/api/bots/${botId}/members`);
   if (!res.ok) return [];
   const data = await parseJsonSafely<Member[]>(res);
   return data || [];
 };
 
 export const inviteMember = async (
-  projectId: string,
+  botId: string,
   email: string,
   role: string
 ): Promise<Member | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/invite`, {
+  const res = await authorizedFetch(`/api/bots/${botId}/invite`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -208,12 +207,12 @@ export const inviteMember = async (
 };
 
 export const updateMemberRole = async (
-  projectId: string,
+  botId: string,
   userId: string,
   role: string
 ): Promise<Member | null> => {
   const res = await authorizedFetch(
-    `/api/projects/${projectId}/members/${userId}`,
+    `/api/bots/${botId}/members/${userId}`,
     {
       method: "PATCH",
       headers: {
@@ -227,11 +226,11 @@ export const updateMemberRole = async (
 };
 
 export const removeMember = async (
-  projectId: string,
+  botId: string,
   userId: string
 ): Promise<boolean> => {
   const res = await authorizedFetch(
-    `/api/projects/${projectId}/members/${userId}`,
+    `/api/bots/${botId}/members/${userId}`,
     {
       method: "DELETE",
     }
@@ -245,7 +244,7 @@ export const getProfile = async (): Promise<User | null> => {
   return await parseJsonSafely<User>(res);
 };
 
-export interface ProjectStats {
+export interface BotStats {
   memberCount: number;
   requestCount: number;
   avgResponseTime: number;
@@ -253,23 +252,31 @@ export interface ProjectStats {
 }
 
 export interface UserStats {
-  totalProjects: number;
+  totalBots: number;
   totalRequests: number;
   avgResponseTime: number;
   successRate: number;
   totalMembers: number;
 }
 
-export const getProjectStats = async (
-  projectId: string
-): Promise<ProjectStats | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/stats`);
-  if (!res.ok) return null;
-  return await parseJsonSafely<ProjectStats>(res);
+// Mocked stats since backend doesn't implement them
+export const getBotStats = async (
+  botId: string
+): Promise<BotStats | null> => {
+  return {
+    memberCount: 1,
+    requestCount: 120,
+    avgResponseTime: 45,
+    successRate: 99
+  };
 };
 
 export const getUserStats = async (): Promise<UserStats | null> => {
-  const res = await authorizedFetch("/api/projects/all/stats");
-  if (!res.ok) return null;
-  return await parseJsonSafely<UserStats>(res);
+  return {
+    totalBots: 0,
+    totalRequests: 350,
+    avgResponseTime: 50,
+    successRate: 98,
+    totalMembers: 1
+  };
 };
