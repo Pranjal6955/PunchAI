@@ -15,7 +15,7 @@ from app.schemas.chat import (
 from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
-from app.services.llm import build_rag_prompt, generate_ollama_response
+from app.services.llm import build_rag_prompt, generate_llm_response
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -74,14 +74,14 @@ async def add_message(
     # Optional: Log the retrieved context into the user's message metadata
     await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
 
-    # 3. LLM Generation (Ollama local)
+    # 3. LLM Generation (OpenRouter with Groq Fallback)
     prompt = build_rag_prompt(
         persona=chat.bot.botPersona, 
         context=context_chunks, 
         question=payload.content
     )
     
-    ai_text = generate_ollama_response(prompt)
+    ai_text = generate_llm_response(prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(

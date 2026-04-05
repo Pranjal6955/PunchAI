@@ -35,7 +35,7 @@ async def test_chat_lifecycle(authed_client, user_token, test_bot):
 
     # 2. Add Message (Mocking LLM and Retrieval)
     with patch("app.api.routes.chats.hybrid_retrieve", return_value=["Mocked knowledge chunk"]), \
-         patch("app.api.routes.chats.generate_ollama_response", return_value="Hello! I am your AI."):
+         patch("app.api.routes.chats.generate_llm_response", return_value="Hello! I am your AI."):
         
         message_payload = {"content": "Hello bot!"}
         response = await authed_client.post(f"/api/chats/{chat_id}/messages", json=message_payload)

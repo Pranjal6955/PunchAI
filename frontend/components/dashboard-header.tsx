@@ -24,7 +24,11 @@ export function DashboardHeader() {
     breadcrumbs.push({ label: "Dashboard", href: "/dashboard", current: segments.length === 1 });
 
     if (segments.includes("chatbots")) {
-      breadcrumbs.push({ label: "Chatbots", href: "/dashboard/chatbots", current: true });
+      breadcrumbs.push({ label: "Chatbots", href: "/dashboard/chatbots", current: segments.length === 2 });
+    }
+
+    if (segments.includes("dataSources")) {
+      breadcrumbs.push({ label: "Data Sources", href: "/dashboard/dataSources", current: true });
     }
 
     return breadcrumbs;

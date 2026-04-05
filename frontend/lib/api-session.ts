@@ -98,6 +98,27 @@ export interface Bot {
   updatedAt: string;
 }
 
+export interface DataSource {
+  id: string;
+  name: string;
+  type: "FILE" | "URL" | "TEXT";
+  status: "PROCESSING" | "COMPLETED" | "FAILED";
+  fileUrl?: string;
+  botId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+  botId: string;
+  sourceId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -170,6 +191,70 @@ export const deleteBot = async (botId: string): Promise<boolean> => {
   });
   return res.ok;
 };
+
+// --- DataSource API Functions ---
+
+export const getDataSources = async (botId: string): Promise<DataSource[]> => {
+  const res = await authorizedFetch(`/api/datasources/?botId=${botId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<{ data: DataSource[]; total: number }>(res);
+  return data?.data || [];
+};
+
+export const uploadPDF = async (botId: string, file: File): Promise<DataSource | null> => {
+  const formData = new FormData();
+  formData.append("botId", botId);
+  formData.append("file", file);
+
+  const res = await authorizedFetch("/api/datasources/upload", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const addURL = async (botId: string, url: string): Promise<DataSource | null> => {
+  const res = await authorizedFetch("/api/datasources/url", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ botId, url }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const addFAQ = async (
+  botId: string,
+  name: string,
+  faqs: { question: string; answer: string }[]
+): Promise<DataSource | null> => {
+  const res = await authorizedFetch("/api/datasources/faq", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ botId, name, faqs }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const deleteDataSource = async (dsId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/datasources/${dsId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+};
+
+export const listFaqs = async (botId: string): Promise<FAQ[]> => {
+  const res = await authorizedFetch(`/api/datasources/faqs?botId=${botId}`);
+  if (!res.ok) return [];
+  return (await parseJsonSafely<FAQ[]>(res)) || [];
+};
+
 
 export interface Member {
   _id: string;

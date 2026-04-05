@@ -96,7 +96,7 @@ export function DashboardSidebar() {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={pathname === "/dashboard/workspace"} tooltip="Data Source">
-                <Link href="/dashboard/workspace">
+                <Link href="/dashboard/dataSources">
                   <DatabaseBackupIcon className="size-4" />
                   <span>Data Source</span>
                 </Link>

@@ -15,9 +15,10 @@ import {
     MoreVertical,
     Trash2,
     ExternalLink,
-    MessageSquare,
+    Sparkles,
     Bot as BotIcon
 } from "lucide-react"
+
 import Link from "next/link"
 import { motion } from "framer-motion"
 
@@ -33,6 +34,24 @@ export const getPersonaName = (persona?: string) => {
     return BOT_PERSONA_MAPPING[persona] || "Custom";
 };
 
+export const getPersonaStyles = (persona: string) => {
+    switch (persona) {
+        case "Professional":
+            return "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400";
+        case "Friendly":
+            return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400";
+        case "Technical":
+            return "bg-violet-500/10 text-violet-600 border-violet-500/20 dark:text-violet-400";
+        case "Concise":
+            return "bg-orange-500/10 text-orange-600 border-orange-500/20 dark:text-orange-400";
+        case "General":
+            return "bg-slate-500/10 text-slate-600 border-slate-500/20 dark:text-slate-400";
+        default:
+            return "bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400";
+    }
+};
+
+
 interface ChatbotBlockProps {
     bot: Bot;
     viewMode: "grid" | "list";
@@ -41,7 +60,11 @@ interface ChatbotBlockProps {
 }
 
 export function ChatbotBlock({ bot, viewMode, index, onDelete }: ChatbotBlockProps) {
+    const personaName = getPersonaName(bot.botPersona);
+    const personaStyles = getPersonaStyles(personaName);
+
     if (viewMode === "grid") {
+
         return (
             <motion.div
                 layout
@@ -54,9 +77,10 @@ export function ChatbotBlock({ bot, viewMode, index, onDelete }: ChatbotBlockPro
                     <CardHeader className="pb-4 space-y-4">
                         <div className="flex justify-between items-start">
                             <div className="flex flex-wrap gap-2">
-                                <Badge variant="secondary" className="rounded-none uppercase tracking-widest text-[10px] font-bold px-4 py-1.5 border-border/40 w-fit justify-center bg-muted/60">
-                                    {getPersonaName(bot.botPersona)}
+                                <Badge variant="outline" className={`rounded-none uppercase tracking-widest text-[10px] font-bold px-4 py-1.5 w-fit justify-center ${personaStyles}`}>
+                                    {personaName}
                                 </Badge>
+
                                 <Badge variant="outline" className="rounded-none capitalize text-[10px] font-medium px-3 py-1 border-border/40 text-muted-foreground whitespace-nowrap">
                                     {bot.dataSourceCount || 0} Sources
                                 </Badge>
@@ -102,17 +126,19 @@ export function ChatbotBlock({ bot, viewMode, index, onDelete }: ChatbotBlockPro
                             </span>
                         </div>
                         <div className="grid grid-cols-2 gap-3 w-full">
-                            <Button asChild variant="outline" size="sm" className="w-full h-9 text-[10px] uppercase font-bold tracking-widest border-border/60 hover:bg-muted transition-all active:scale-95">
+                            <Button asChild variant="outline" size="sm" className="w-full h-9 text-[10px] uppercase font-bold tracking-widest border-border/60 hover:bg-primary/5 hover:border-primary/20 hover:text-primary transition-all active:scale-95 rounded-none">
                                 <Link href={`/dashboard/chatbots/${bot.id}`}>
-                                    View Chatbot
+                                    View Details
                                 </Link>
                             </Button>
-                            <Button asChild size="sm" className="w-full h-9 text-[10px] uppercase font-bold tracking-widest shadow-lg shadow-primary/20 transition-all active:scale-95">
+                            <Button asChild size="sm" className="w-full h-9 text-[10px] uppercase font-bold tracking-widest bg-primary text-primary-foreground hover:opacity-90 shadow-lg shadow-primary/20 transition-all active:scale-95 rounded-none group/play">
                                 <Link href={`/dashboard/chatbots/${bot.id}/playground`}>
-                                    Playground <MessageSquare className="ml-2 h-3.5 w-3.5" />
+                                    Playground <Sparkles className="ml-2 h-3.5 w-3.5 group-hover/play:rotate-12 transition-transform" />
                                 </Link>
                             </Button>
+
                         </div>
+
                     </div>
                 </Card>
             </motion.div>
@@ -134,10 +160,11 @@ export function ChatbotBlock({ bot, viewMode, index, onDelete }: ChatbotBlockPro
                 </Link>
             </div>
             <div className="col-span-2">
-                <Badge variant="secondary" className="rounded-none uppercase tracking-widest text-[9px] font-bold px-3 py-1.5 border-border/40 w-fit justify-center bg-muted/60">
-                    {getPersonaName(bot.botPersona)}
+                <Badge variant="outline" className={`rounded-none uppercase tracking-widest text-[9px] font-bold px-3 py-1.5 w-fit justify-center ${personaStyles}`}>
+                    {personaName}
                 </Badge>
             </div>
+
             <div className="col-span-2">
                 <Badge variant="outline" className="rounded-none capitalize text-[10px] font-medium px-2 py-0.5 border-border/40 text-muted-foreground whitespace-nowrap">
                     {bot.dataSourceCount || 0} Chunks
@@ -162,10 +189,11 @@ export function ChatbotBlock({ bot, viewMode, index, onDelete }: ChatbotBlockPro
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer">
                             <Link href={`/dashboard/chatbots/${bot.id}/playground`}>
-                                <MessageSquare className="mr-2 h-4 w-4" />
+                                <Sparkles className="mr-2 h-4 w-4" />
                                 Playground
                             </Link>
                         </DropdownMenuItem>
+
                         <DropdownMenuItem
                             className="text-destructive focus:text-destructive cursor-pointer"
                             onClick={() => onDelete(bot.id)}
