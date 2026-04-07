@@ -33,7 +33,7 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
         return (
             <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b last:border-0 hover:bg-muted/50 transition-colors items-center">
                 <div className="col-span-6 font-medium text-sm truncate pr-4">
-                    <Link href={`/dashboard/Project/${bot.id}`} className="hover:underline flex items-center gap-3">
+                    <Link href={`/dashboard/chatbot/${bot.id}`} className="hover:underline flex items-center gap-3">
                         <BotIcon className="size-4 text-muted-foreground" />
                         {bot.name}
                     </Link>
@@ -46,7 +46,7 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                     {new Date(bot.createdAt).toLocaleDateString()}
                 </div>
                 <div className="col-span-2 flex justify-end gap-2">
-                    <Link href={`/dashboard/Project/${bot.id}`}>
+                    <Link href={`/dashboard/chatbot/${bot.id}`}>
                         <Button variant="ghost" size="icon" className="rounded-none">
                             <MessageSquare className="h-4 w-4" />
                         </Button>
@@ -94,7 +94,7 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="rounded-none">
                         <DropdownMenuItem asChild className="cursor-pointer rounded-none">
-                            <Link href={`/dashboard/Project/${bot.id}`}>
+                            <Link href={`/dashboard/chatbot/${bot.id}`}>
                                 <MessageSquare className="mr-2 h-4 w-4" />
                                 Open Chat
                             </Link>
@@ -118,13 +118,13 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                 </div>
             </CardContent>
             <CardFooter className="grid grid-cols-2 gap-2">
-                <Link href={`/dashboard/Project/${bot.id}`}>
+                <Link href={`/dashboard/chatbot/${bot.id}`}>
                     <Button variant="outline" className="w-full rounded-none gap-2">
                         <EyeIcon className="h-4 w-4" />
                         View Details
                     </Button>
                 </Link>
-                <Link href={`/dashboard/Project/${bot.id}`}>
+                <Link href={`/dashboard/chatbot/${bot.id}`}>
                     <Button className="w-full rounded-none gap-2">
                         <MessageSquare className="h-4 w-4" />
                         Chat with Agent

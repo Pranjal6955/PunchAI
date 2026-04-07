@@ -153,13 +153,13 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="relative z-10 flex items-center gap-2">
-                    <img src="/Logo_dark_theme.png" alt="Punch Studio" className="h-10 w-auto object-contain" />
+                    <img src="/Logo_dark_theme.png" alt="PunchAI" className="h-10 w-auto object-contain" />
                 </div>
 
                 <div className="relative z-10 mt-auto">
                     <blockquote className="space-y-4">
                         <p className="text-lg font-medium leading-relaxed">
-                            &ldquo;Integrating an intelligent conversational layer into our platform was effortless with Punch Studio. It&apos;s the ultimate accelerator for modern AI-driven product teams.&rdquo;
+                            &ldquo;Integrating an intelligent conversational layer into our platform was effortless with PunchAI. It&apos;s the ultimate accelerator for modern AI-driven product teams.&rdquo;
                         </p>
                         <footer className="text-sm font-medium text-zinc-400">Marcus Wright, VP of Product</footer>
                     </blockquote>
@@ -170,7 +170,7 @@ export default function RegisterPage() {
             <div className="flex flex-col items-center justify-center p-8 bg-background relative">
                 {/* Mobile branding */}
                 <div className="md:hidden flex items-center gap-2 mb-10">
-                    <img src="/Logo_dark_theme.png" alt="Punch Studio" className="h-10 w-auto object-contain" />
+                    <img src="/Logo_dark_theme.png" alt="PunchAI" className="h-10 w-auto object-contain" />
                 </div>
 
                 <div className="w-full max-w-[380px] space-y-5">

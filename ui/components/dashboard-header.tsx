@@ -10,22 +10,72 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { usePathname } from "next/navigation";
-import React from "react";
+import { usePathname, useParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { getBot } from "@/lib/api-session";
 
 export function DashboardHeader() {
   const pathname = usePathname();
+  const params = useParams();
+  const [botName, setBotName] = useState<string | null>(null);
 
-  const getBreadcrumbs = () => {
+  useEffect(() => {
+    const fetchBotName = async () => {
+      const id = params?.Id as string;
+      if (id) {
+        try {
+          const bot = await getBot(id);
+          if (bot) setBotName(bot.name);
+        } catch (error) {
+          console.error("Failed to fetch bot for breadcrumb", error);
+        }
+      } else {
+        setBotName(null);
+      }
+    };
+    fetchBotName();
+  }, [params?.Id]);
+
+  interface Crumb {
+    label: string;
+    href: string;
+    current: boolean;
+  }
+
+  const getBreadcrumbs = (): Crumb[] => {
     const segments = pathname.split("/").filter(Boolean);
-    const breadcrumbs = [];
+    const breadcrumbs: { label: string; href: string; current: boolean }[] = [];
+    let currentPath = "";
 
-    // Base dashboard link
-    breadcrumbs.push({ label: "Dashboard", href: "/dashboard", current: segments.length === 1 });
+    // Mapping for user-friendly labels
+    const labelMap: Record<string, string> = {
+      dashboard: "Dashboard",
+      chatbot: "Chatbots",
+      dataSource: "Data Sources",
 
-    if (segments.includes("Project")) {
-      breadcrumbs.push({ label: "Projects", href: "/dashboard/Project", current: true });
-    }
+    };
+
+    segments.forEach((segment, index) => {
+      currentPath += `/${segment}`;
+      const isLast = index === segments.length - 1;
+
+      // Check if it's likely an ID (comes after chatbot/Project and doesn't match keys)
+      const isId = index > 0 &&
+        (segments[index - 1] === "chatbot" || segments[index - 1] === "Project") &&
+        !labelMap[segment];
+
+      let label = labelMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
+
+      if (isId) {
+        label = botName || "Loading...";
+      }
+
+      breadcrumbs.push({
+        label,
+        href: currentPath,
+        current: isLast,
+      });
+    });
 
     return breadcrumbs;
   };

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { BadgeCheck, Bell, BotMessageSquare, ChevronsUpDown, CreditCard, Database, GalleryVerticalEnd, LayoutDashboard, LogOut, Sparkles } from "lucide-react";
+import Image from "next/image";
 import {
   Sidebar,
   SidebarContent,
@@ -58,14 +59,12 @@ export function DashboardSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <GalleryVerticalEnd className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold uppercase tracking-wider">Punch Studio</span>
-                  <span className="truncate text-xs text-muted-foreground">Workspace</span>
+            <SidebarMenuButton size="lg" asChild className="hover:bg-transparent">
+              <Link href="/dashboard" className="flex items-center">
+                <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={32} height={32} className="object-contain shrink-0" />
+                <div className="grid flex-1 text-left text-sm leading-tight ml-3 group-data-[collapsible=icon]:hidden">
+                  <span className="truncate font-bold text-sidebar-foreground tracking-tight">Punch Studio</span>
+                  <span className="truncate text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">AI Creative Studio</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -86,16 +85,16 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/Project")} tooltip="Chatbot">
-                <Link href="/dashboard/Project">
+              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/chatbot")} tooltip="Chatbot">
+                <Link href="/dashboard/chatbot">
                   <BotMessageSquare className="size-4" />
                   <span>Chatbot</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === "/dashboard/workspace"} tooltip="Data Sources">
-                <Link href="/dashboard/workspace">
+              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/dataSource")} tooltip="Data Sources">
+                <Link href="/dashboard/dataSource">
                   <Database className="size-4" />
                   <span>Data Sources</span>
                 </Link>

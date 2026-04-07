@@ -114,7 +114,7 @@ export default function LoginPage() {
                             <div className="flex flex-col items-end pl-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
                                 <span className="text-[10px] text-zinc-400 font-medium mb-1.5 mr-1 uppercase tracking-wider">You</span>
                                 <div className="bg-primary/20 text-white text-sm py-3 px-4 rounded-none border border-primary/30 shadow-sm backdrop-blur-md">
-                                    <TextType text="Hey Punch Studio, can you help me draft a response to an unhappy customer?" loop={false} />
+                                    <TextType text="Hey PunchAI, can you help me draft a response to an unhappy customer?" loop={false} />
                                 </div>
                             </div>
                         )}
@@ -168,13 +168,13 @@ export default function LoginPage() {
                 </div>
 
                 <div className="relative z-10 flex items-center gap-2">
-                    <img src="/Logo_dark_theme.png" alt="Punch Studio" className="h-10 w-auto object-contain" />
+                    <img src="/Logo_dark_theme.png" alt="PunchAI" className="h-10 w-auto object-contain" />
                 </div>
 
                 <div className="relative z-10 mt-auto">
                     <blockquote className="space-y-4">
                         <p className="text-lg font-medium leading-relaxed">
-                            &ldquo;Punch Studio has revolutionized how we manage our chatbot pipelines. The intuitive dashboard and powerful inference capabilities are unmatched.&rdquo;
+                            &ldquo;PunchAI has revolutionized how we manage our chatbot pipelines. The intuitive dashboard and powerful inference capabilities are unmatched.&rdquo;
                         </p>
                         <footer className="text-sm font-medium text-zinc-400">Sofia Davis, Lead AI Engineer</footer>
                     </blockquote>
@@ -185,7 +185,7 @@ export default function LoginPage() {
             <div className="flex flex-col items-center justify-center p-8 bg-background relative">
                 {/* Mobile branding */}
                 <div className="md:hidden flex items-center gap-2 mb-10">
-                    <img src="/Logo_dark_theme.png" alt="Punch Studio" className="h-10 w-auto object-contain" />
+                    <img src="/Logo_dark_theme.png" alt="PunchAI" className="h-10 w-auto object-contain" />
                 </div>
 
                 <div className="w-full max-w-[380px] space-y-5">
