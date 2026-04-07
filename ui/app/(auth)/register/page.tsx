@@ -20,6 +20,8 @@ import { Field, FieldError } from "@/components/ui/field"
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import { api } from "@/lib/api"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 const registerSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -39,6 +41,7 @@ export default function RegisterPage() {
     const [isLoading, setIsLoading] = React.useState(false)
     const [showPassword, setShowPassword] = React.useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
 
     const form = useForm<RegisterFormValues>({
         resolver: zodResolver(registerSchema),
@@ -57,6 +60,7 @@ export default function RegisterPage() {
 
     async function onSubmit(values: RegisterFormValues) {
         setIsLoading(true)
+        setError(null)
 
         try {
             const { confirmPassword, termsAccepted, ...submitValues } = values;
@@ -73,8 +77,10 @@ export default function RegisterPage() {
 
             // Redirect to dashboard
             router.push("/dashboard")
-        } catch (error: any) {
-            toast.error(error.message || "Something went wrong")
+        } catch (err: any) {
+            const message = err.message || "Something went wrong"
+            setError(message)
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -182,6 +188,14 @@ export default function RegisterPage() {
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        {error && (
+                            <Alert variant="destructive" className="rounded-none">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>
+                                    {error}
+                                </AlertDescription>
+                            </Alert>
+                        )}
                         <Field className="space-y-1">
                             <Label htmlFor="name" className="font-semibold">Full Name</Label>
                             <Input

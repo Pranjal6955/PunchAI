@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label"
 import { Field, FieldError } from "@/components/ui/field"
 import Link from "next/link"
 import { api } from "@/lib/api"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 const loginSchema = z.object({
     email: z.string().min(1, "Email is required").email("Invalid email address"),
@@ -32,6 +34,7 @@ export default function LoginPage() {
     const router = useRouter()
     const [isLoading, setIsLoading] = React.useState(false)
     const [showPassword, setShowPassword] = React.useState(false)
+    const [error, setError] = React.useState<string | null>(null)
 
     const [chatStep, setChatStep] = React.useState(0)
 
@@ -62,6 +65,7 @@ export default function LoginPage() {
 
     async function onSubmit(values: LoginFormValues) {
         setIsLoading(true)
+        setError(null)
 
         try {
             const data = await api.auth.login(values);
@@ -76,8 +80,10 @@ export default function LoginPage() {
 
             // Redirect to dashboard
             router.push("/dashboard")
-        } catch (error: any) {
-            toast.error(error.message || "Something went wrong")
+        } catch (err: any) {
+            const message = err.message || "Something went wrong"
+            setError(message)
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -197,6 +203,14 @@ export default function LoginPage() {
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        {error && (
+                            <Alert variant="destructive" className="rounded-none">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription>
+                                    {error}
+                                </AlertDescription>
+                            </Alert>
+                        )}
                         <Field className="space-y-1">
                             <Label htmlFor="email" className="font-semibold">Work Email</Label>
                             <Input
