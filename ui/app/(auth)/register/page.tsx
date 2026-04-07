@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Field, FieldError } from "@/components/ui/field"
 import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
-import { api } from "@/lib/api"
+import { signup } from "@/lib/api-session"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
@@ -65,13 +65,7 @@ export default function RegisterPage() {
         try {
             const { confirmPassword, termsAccepted, ...submitValues } = values;
 
-            const data = await api.auth.signup(submitValues);
-
-            // Save token and user details to local storage
-            localStorage.setItem("token", data.accessToken)
-            if (data.user) {
-                localStorage.setItem("user", JSON.stringify(data.user))
-            }
+            await signup(submitValues);
 
             toast.success("Account created successfully! Redirecting...")
 

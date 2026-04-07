@@ -1,4 +1,4 @@
-const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
 const buildApiUrl = (path: string) => (apiBase ? `${apiBase}${path}` : path);
 
@@ -37,15 +37,15 @@ export const refreshAccessToken = async (): Promise<string | null> => {
       return null;
     }
 
-    const data = await parseJsonSafely<{ token?: string }>(res);
+    const data = await parseJsonSafely<{ accessToken?: string }>(res);
 
-    if (!data?.token) {
+    if (!data?.accessToken) {
       clearStoredAccessToken();
       return null;
     }
 
-    setStoredAccessToken(data.token);
-    return data.token;
+    setStoredAccessToken(data.accessToken);
+    return data.accessToken;
   } catch {
     clearStoredAccessToken();
     return null;
@@ -88,22 +88,55 @@ export const authorizedFetch = async (
   return response;
 };
 
-export interface Project {
-  _id: string;
-  name: string;
-  description?: string;
-  apiType: string;
-  role: string;
-  createdAt: string;
-  createdBy: string;
-  joinedAt?: string;
-}
-
 export interface User {
+  id: string;
   name: string;
   email: string;
   avatar?: string;
+  createdAt: string;
 }
+
+export const login = async (credentials: any): Promise<any> => {
+  const res = await fetch(buildApiUrl("/api/auth/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Login failed");
+  }
+
+  if (data.accessToken) {
+    setStoredAccessToken(data.accessToken);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+  }
+  return data;
+};
+
+export const signup = async (userData: any): Promise<any> => {
+  const res = await fetch(buildApiUrl("/api/auth/signup"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(userData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Registration failed");
+  }
+
+  if (data.accessToken) {
+    setStoredAccessToken(data.accessToken);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("user", JSON.stringify(data.user));
+    }
+  }
+  return data;
+};
 
 export const logoutSession = async (): Promise<void> => {
   try {
@@ -111,131 +144,14 @@ export const logoutSession = async (): Promise<void> => {
       method: "POST",
       credentials: "include",
     });
+  } catch {
+    // ignore
   } finally {
     clearStoredAccessToken();
-  }
-};
-
-export const getProjects = async (): Promise<Project[]> => {
-  const res = await authorizedFetch("/api/projects");
-  if (!res.ok) return [];
-  const data = await parseJsonSafely<Project[]>(res);
-  return data || [];
-};
-
-export const getProject = async (projectId: string): Promise<Project | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`);
-  if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
-};
-
-export const createProject = async (data: {
-  name: string;
-  description?: string;
-  apiType: string;
-}): Promise<Project | null> => {
-  const res = await authorizedFetch("/api/projects", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
-};
-
-export const updateProject = async (
-  projectId: string,
-  data: {
-    name?: string;
-    description?: string;
-    apiType?: string;
-  }
-): Promise<Project | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) return null;
-  return await parseJsonSafely<Project>(res);
-};
-
-export const deleteProject = async (projectId: string): Promise<boolean> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}`, {
-    method: "DELETE",
-  });
-  return res.ok;
-};
-
-export interface Member {
-  _id: string;
-  projectId: string;
-  userId: {
-    _id: string;
-    name: string;
-    email: string;
-  };
-  role: "admin" | "editor" | "viewer";
-  joinedAt: string;
-}
-
-export const listMembers = async (projectId: string): Promise<Member[]> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/members`);
-  if (!res.ok) return [];
-  const data = await parseJsonSafely<Member[]>(res);
-  return data || [];
-};
-
-export const inviteMember = async (
-  projectId: string,
-  email: string,
-  role: string
-): Promise<Member | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/invite`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, role }),
-  });
-  if (!res.ok) return null;
-  return await parseJsonSafely<Member>(res);
-};
-
-export const updateMemberRole = async (
-  projectId: string,
-  userId: string,
-  role: string
-): Promise<Member | null> => {
-  const res = await authorizedFetch(
-    `/api/projects/${projectId}/members/${userId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ role }),
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user");
     }
-  );
-  if (!res.ok) return null;
-  return await parseJsonSafely<Member>(res);
-};
-
-export const removeMember = async (
-  projectId: string,
-  userId: string
-): Promise<boolean> => {
-  const res = await authorizedFetch(
-    `/api/projects/${projectId}/members/${userId}`,
-    {
-      method: "DELETE",
-    }
-  );
-  return res.ok;
+  }
 };
 
 export const getProfile = async (): Promise<User | null> => {
@@ -244,31 +160,279 @@ export const getProfile = async (): Promise<User | null> => {
   return await parseJsonSafely<User>(res);
 };
 
-export interface ProjectStats {
-  memberCount: number;
-  requestCount: number;
-  avgResponseTime: number;
-  successRate: number;
+// --- Bot Interfaces & API ---
+
+export interface Bot {
+  id: string;
+  name: string;
+  description?: string;
+  botPersona: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  dataSourceCount?: number;
 }
 
-export interface UserStats {
-  totalProjects: number;
-  totalRequests: number;
-  avgResponseTime: number;
-  successRate: number;
-  totalMembers: number;
+export interface BotListResponse {
+  data: Bot[];
+  total: number;
 }
 
-export const getProjectStats = async (
-  projectId: string
-): Promise<ProjectStats | null> => {
-  const res = await authorizedFetch(`/api/projects/${projectId}/stats`);
-  if (!res.ok) return null;
-  return await parseJsonSafely<ProjectStats>(res);
+export const getBots = async (ownerId?: string): Promise<Bot[]> => {
+  const url = ownerId ? `/api/bots/?ownerId=${ownerId}` : "/api/bots/";
+  const res = await authorizedFetch(url);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<BotListResponse>(res);
+  return data?.data || [];
 };
 
-export const getUserStats = async (): Promise<UserStats | null> => {
-  const res = await authorizedFetch("/api/projects/all/stats");
+export const getBot = async (botId: string): Promise<Bot | null> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`);
   if (!res.ok) return null;
-  return await parseJsonSafely<UserStats>(res);
+  return await parseJsonSafely<Bot>(res);
+};
+
+export const createBot = async (data: {
+  name: string;
+  description?: string;
+  botPersona: string;
+}): Promise<Bot | null> => {
+  const res = await authorizedFetch("/api/bots/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<Bot>(res);
+};
+
+export const updateBot = async (
+  botId: string,
+  data: Partial<Omit<Bot, "id" | "ownerId" | "createdAt" | "updatedAt">>
+): Promise<Bot | null> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<Bot>(res);
+};
+
+export const deleteBot = async (botId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/bots/${botId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+};
+
+// --- Chat Interfaces & API ---
+
+export interface Message {
+  id: string;
+  role: "USER" | "ASSISTANT";
+  content: string;
+  createdAt: string;
+  metadata?: any;
+}
+
+export interface Chat {
+  id: string;
+  title: string;
+  userId: string;
+  botId: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: Message[];
+}
+
+export interface ChatListResponse {
+  data: Chat[];
+  total: number;
+}
+
+export const getChats = async (userId: string): Promise<Chat[]> => {
+  const res = await authorizedFetch(`/api/chats/?userId=${userId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<ChatListResponse>(res);
+  return data?.data || [];
+};
+
+export const getChat = async (chatId: string): Promise<Chat | null> => {
+  const res = await authorizedFetch(`/api/chats/${chatId}`);
+  if (!res.ok) return null;
+  return await parseJsonSafely<Chat>(res);
+};
+
+export const createChat = async (data: {
+  userId: string;
+  botId: string;
+  title?: string;
+}): Promise<Chat | null> => {
+  const res = await authorizedFetch("/api/chats/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<Chat>(res);
+};
+
+export const addMessage = async (
+  chatId: string,
+  content: string
+): Promise<Message | null> => {
+  const res = await authorizedFetch(`/api/chats/${chatId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<Message>(res);
+};
+
+export const deleteChat = async (chatId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/chats/${chatId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+};
+
+// --- Data Source Interfaces & API ---
+
+export interface DataSource {
+  id: string;
+  name: string;
+  type: "FILE" | "URL" | "TEXT";
+  status: "PROCESSING" | "COMPLETED" | "FAILED";
+  botId: string;
+  fileUrl?: string;
+  createdAt: string;
+}
+
+export interface DataSourceListResponse {
+  data: DataSource[];
+  total: number;
+}
+
+export interface FAQ {
+  id: string;
+  question: string;
+  answer: string;
+  botId: string;
+  sourceId: string;
+  createdAt: string;
+}
+
+export interface DocumentChunk {
+  id: string;
+  content: string;
+  metadata?: any;
+  sourceId: string;
+  botId: string;
+  createdAt: string;
+}
+
+export const getDataSources = async (botId: string): Promise<DataSource[]> => {
+  const res = await authorizedFetch(`/api/datasources/?botId=${botId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<DataSourceListResponse>(res);
+  return data?.data || [];
+};
+
+export const uploadDataSource = async (botId: string, file: File): Promise<DataSource | null> => {
+  const formData = new FormData();
+  formData.append("botId", botId);
+  formData.append("file", file);
+
+  const res = await authorizedFetch("/api/datasources/upload", {
+    method: "POST",
+    body: formData,
+    // Note: Do not set Content-Type header when using FormData with fetch
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const addUrlDataSource = async (botId: string, url: string): Promise<DataSource | null> => {
+  const res = await authorizedFetch("/api/datasources/url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ botId, url }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const addFaqDataSource = async (botId: string, name: string, faqs: { question: string, answer: string }[]): Promise<DataSource | null> => {
+  const res = await authorizedFetch("/api/datasources/faq", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ botId, name, faqs }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DataSource>(res);
+};
+
+export const deleteDataSource = async (dsId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/datasources/${dsId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+};
+
+export const listFaqs = async (botId: string): Promise<FAQ[]> => {
+  const res = await authorizedFetch(`/api/datasources/faqs?botId=${botId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<FAQ[]>(res);
+  return data || [];
+};
+
+export const updateFaq = async (faqId: string, data: { question?: string, answer?: string }): Promise<FAQ | null> => {
+  const res = await authorizedFetch(`/api/datasources/faqs/${faqId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<FAQ>(res);
+};
+
+export const deleteFaq = async (faqId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/datasources/faqs/${faqId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+};
+
+export const getSourceChunks = async (dsId: string): Promise<DocumentChunk[]> => {
+  const res = await authorizedFetch(`/api/datasources/chunks/${dsId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<DocumentChunk[]>(res);
+  return data || [];
+};
+
+export const updateChunk = async (chunkId: string, content: string): Promise<DocumentChunk | null> => {
+  const res = await authorizedFetch(`/api/datasources/chunks/${chunkId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<DocumentChunk>(res);
+};
+
+export const deleteChunk = async (chunkId: string): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/datasources/chunks/${chunkId}`, {
+    method: "DELETE",
+  });
+  return res.ok;
 };

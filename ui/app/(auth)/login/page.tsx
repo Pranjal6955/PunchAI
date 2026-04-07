@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Field, FieldError } from "@/components/ui/field"
 import Link from "next/link"
-import { api } from "@/lib/api"
+import { login } from "@/lib/api-session"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
@@ -68,13 +68,7 @@ export default function LoginPage() {
         setError(null)
 
         try {
-            const data = await api.auth.login(values);
-
-            // Save token and user details to local storage
-            localStorage.setItem("token", data.accessToken)
-            if (data.user) {
-                localStorage.setItem("user", JSON.stringify(data.user))
-            }
+            await login(values);
 
             toast.success("Login successful! Redirecting...")
 
