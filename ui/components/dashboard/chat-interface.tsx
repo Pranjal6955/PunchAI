@@ -15,9 +15,10 @@ import { getChat, addMessage, createChat, Bot, Message } from "@/lib/api-session
 interface ChatInterfaceProps {
     bot: Bot
     userId: string
+    className?: string
 }
 
-export function ChatInterface({ bot, userId }: ChatInterfaceProps) {
+export function ChatInterface({ bot, userId, className }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState("")
     const [loading, setLoading] = useState(false)
@@ -89,7 +90,7 @@ export function ChatInterface({ bot, userId }: ChatInterfaceProps) {
 
     if (initializing) {
         return (
-            <Card className="flex flex-col h-[600px] rounded-none border-border/60 shadow-none">
+            <Card className={`flex flex-col h-full rounded-none border-border/60 shadow-none ${className || ""}`}>
                 <CardHeader className="border-b border-border/40 py-4">
                     <Skeleton className="h-6 w-48 rounded-none" />
                 </CardHeader>
@@ -106,7 +107,7 @@ export function ChatInterface({ bot, userId }: ChatInterfaceProps) {
     }
 
     return (
-        <Card className="flex flex-col h-[600px] rounded-none border-border/60 bg-background/50 backdrop-blur-sm shadow-none overflow-hidden">
+        <Card className={`flex flex-col h-full rounded-none border-border/60 bg-background/50 backdrop-blur-sm shadow-none overflow-hidden ${className || ""}`}>
             <CardHeader className="border-b border-border/40 py-4 bg-muted/20 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="size-8 rounded-none bg-primary/10 flex items-center justify-center border border-primary/20">

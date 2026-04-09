@@ -27,6 +27,8 @@ import {
     DocumentChunk
 } from "@/lib/api-session"
 import { useSearchParams } from "next/navigation"
+import { Bot as BotIcon } from "lucide-react"
+import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog"
 
 export default function DataSourcesPage() {
     const searchParams = useSearchParams()
@@ -310,45 +312,60 @@ export default function DataSourcesPage() {
                             Connect your documents, websites, and FAQs to train your AI agents.
                         </p>
                     </div>
-                    <div className="shrink-0">
-                        <DataSourceManager
-                            bots={bots}
-                            selectedBotId={selectedBotId}
-                            onSelectedBotIdChange={setSelectedBotId}
-                            loading={loading}
-                            actionLoading={actionLoading}
-                            file={file}
-                            onFileChange={setFile}
-                            onFileUpload={handleFileUpload}
-                            url={url}
-                            onUrlChange={setUrl}
-                            onUrlSubmit={handleUrlAdd}
-                            faqName={faqName}
-                            onFaqNameChange={setFaqName}
-                            faqs={faqs}
-                            onFaqSubmit={handleFaqAdd}
-                            onAddFaqField={addFaqField}
-                            onRemoveFaqField={removeFaqField}
-                            onUpdateFaqField={updateFaqField}
-                            onAgentCreated={fetchBots}
-                            isDataModalOpen={isDataModalOpen}
-                            setIsDataModalOpen={setIsDataModalOpen}
-                            hasDataSources={dataSources.length > 0}
-                        />
-                    </div>
+                    {bots.length > 0 && (
+                        <div className="shrink-0">
+                            <DataSourceManager
+                                bots={bots}
+                                selectedBotId={selectedBotId}
+                                onSelectedBotIdChange={setSelectedBotId}
+                                loading={loading}
+                                actionLoading={actionLoading}
+                                file={file}
+                                onFileChange={setFile}
+                                onFileUpload={handleFileUpload}
+                                url={url}
+                                onUrlChange={setUrl}
+                                onUrlSubmit={handleUrlAdd}
+                                faqName={faqName}
+                                onFaqNameChange={setFaqName}
+                                faqs={faqs}
+                                onFaqSubmit={handleFaqAdd}
+                                onAddFaqField={addFaqField}
+                                onRemoveFaqField={removeFaqField}
+                                onUpdateFaqField={updateFaqField}
+                                onAgentCreated={fetchBots}
+                                isDataModalOpen={isDataModalOpen}
+                                setIsDataModalOpen={setIsDataModalOpen}
+                                hasDataSources={dataSources.length > 0}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex flex-col gap-8">
-                    <div className="flex-1">
-                        <ActiveSourcesList
-                            dataSources={dataSources}
-                            sourcesLoading={sourcesLoading}
-                            onViewDetails={handleViewDetails}
-                            onDelete={handleDelete}
-                            onAddSource={() => setIsDataModalOpen(true)}
-                        />
+                {bots.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-border/40 bg-muted/5 min-h-[400px]">
+                        <div className="size-20 bg-primary/10 flex items-center justify-center mb-6">
+                            <BotIcon className="size-10 text-primary" />
+                        </div>
+                        <h2 className="text-2xl font-bold tracking-tight mb-2 uppercase">No Chatbots Detected</h2>
+                        <p className="text-muted-foreground text-center max-w-md mb-8">
+                            You need to create at least one chatbot agent before you can connect data sources. Data is added specifically to an individual agent.
+                        </p>
+                        <CreateAgentDialog onSuccess={fetchBots} />
                     </div>
-                </div>
+                ) : (
+                    <div className="flex flex-col gap-8">
+                        <div className="flex-1">
+                            <ActiveSourcesList
+                                dataSources={dataSources}
+                                sourcesLoading={sourcesLoading}
+                                onViewDetails={handleViewDetails}
+                                onDelete={handleDelete}
+                                onAddSource={() => setIsDataModalOpen(true)}
+                            />
+                        </div>
+                    </div>
+                )}
             </main>
 
             <SourceDetailsDialog

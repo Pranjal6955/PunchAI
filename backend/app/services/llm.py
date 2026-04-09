@@ -22,7 +22,7 @@ groq_client = Groq(
 
 
 def build_rag_prompt(persona: Optional[str], context: List[str], question: str) -> str:
-    """Constructs a prompt template for the RAG response."""
+    """Constructs a prompt template for the RAG response with a focus on politeness and simplicity."""
     
     context_text = "\n---\n".join(context)
     
@@ -30,20 +30,25 @@ def build_rag_prompt(persona: Optional[str], context: List[str], question: str) 
     base_persona = persona if persona else "You are a helpful and professional AI assistant."
     
     prompt = f"""
-System/Persona:
+### PERSONA
 {base_persona}
 
-Role: 
-Answer the following User Question based ONLY on the provided Context. 
-If the context doesn't contain the answer, politely state that you don't know based on the provided information. 
-Keep your answer concise and accurate.
+### TASK
+You are replying to a user in a chat conversation. Your goal is to answer the user's question accurately using only the provided context. Follow these strict guidelines:
+1. **Be Polite & Conversational**: Always maintain a warm, respectful, and helpful tone. Speak like a friendly professional.
+2. **Simple Language**: Explain concepts in simple, layman terms. Avoid complex jargon or technical speak unless absolutely necessary to explain the data.
+3. **Accuracy**: Use ONLY the information in the context provided below. Do not use outside knowledge.
+4. **Uncertainty**: If the information is not present in the context, politely explain that you don't have that specific information in your records and offer to help with something else.
 
-Context:
+### CONTEXT
 {context_text}
 
 ---
-User Question: {question}
-Answer:
+
+### USER QUESTION
+{question}
+
+### FINAL ANSWER (Simple & Polite)
 """
     return prompt.strip()
 
