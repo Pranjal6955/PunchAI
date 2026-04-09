@@ -64,7 +64,7 @@ export function DashboardSidebar() {
                 <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={32} height={32} className="object-contain shrink-0" />
                 <div className="grid flex-1 text-left text-sm leading-tight ml-3 group-data-[collapsible=icon]:hidden">
                   <span className="truncate font-bold text-sidebar-foreground tracking-tight">Punch Studio</span>
-                  <span className="truncate text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">AI Creative Studio</span>
+                  <span className="truncate text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">Chatbot as a Service</span>
                 </div>
               </Link>
             </SidebarMenuButton>

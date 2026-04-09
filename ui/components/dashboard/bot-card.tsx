@@ -117,15 +117,15 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                     </div>
                 </div>
             </CardContent>
-            <CardFooter className="grid grid-cols-2 gap-2">
-                <Link href={`/dashboard/chatbot/${bot.id}`}>
-                    <Button variant="outline" className="w-full rounded-none gap-2">
+            <CardFooter className="grid grid-cols-2 gap-2 px-6">
+                <Link href={`/dashboard/chatbot/${bot.id}`} className="w-full">
+                    <Button variant="outline" className="w-full rounded-none gap-2 h-9 text-xs">
                         <EyeIcon className="h-4 w-4" />
                         View Details
                     </Button>
                 </Link>
-                <Link href={`/dashboard/chatbot/${bot.id}`}>
-                    <Button className="w-full rounded-none gap-2">
+                <Link href={`/dashboard/chatbot/${bot.id}`} className="w-full">
+                    <Button className="w-full rounded-none gap-2 h-9 text-xs">
                         <MessageSquare className="h-4 w-4" />
                         Chat with Agent
                     </Button>

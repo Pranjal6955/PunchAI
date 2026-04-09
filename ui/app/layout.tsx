@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PunchAI",
-  description: "Punch AI - Next Gen Chatbot Platform",
+  title: "Punch Studio",
+  description: "Punch Studio - Chatbot as a Service",
   icons: {
     icon: "/Logo_dark_theme.png",
   },

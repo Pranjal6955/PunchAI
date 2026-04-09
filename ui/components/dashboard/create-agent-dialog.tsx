@@ -54,11 +54,17 @@ const PERSONA_TEMPLATES = [
 ]
 
 interface CreateAgentDialogProps {
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
     onSuccess?: () => void
+    showTrigger?: boolean
 }
 
-export function CreateAgentDialog({ onSuccess }: CreateAgentDialogProps) {
-    const [open, setOpen] = useState(false)
+export function CreateAgentDialog({ open: controlledOpen, onOpenChange: controlledOnOpenChange, onSuccess, showTrigger = true }: CreateAgentDialogProps) {
+    const [internalOpen, setInternalOpen] = useState(false)
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+    const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen
+
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState({
         name: "",
@@ -102,12 +108,14 @@ export function CreateAgentDialog({ onSuccess }: CreateAgentDialogProps) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button className="rounded-none">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Chatbot
-                </Button>
-            </DialogTrigger>
+            {showTrigger && (
+                <DialogTrigger asChild>
+                    <Button className="rounded-none">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Chatbot
+                    </Button>
+                </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[550px] rounded-none border-border/60">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
