@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CheckCircle2, FileText, Globe, Link as LinkIcon, Loader2, MessageSquareText, Plus, Upload, X, Bot as BotIcon, Settings2, ChevronDown } from "lucide-react"
+import { CheckCircle2, FileText, Globe, Link as LinkIcon, Loader2, MessageSquareText, Plus, Upload, X, Bot as BotIcon, Settings2, ChevronDown, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog"
+import { Badge } from "@/components/ui/badge"
 
 type FaqDraft = { question: string; answer: string }
 
@@ -36,18 +37,20 @@ interface DataSourceManagerProps {
   actionLoading: boolean
   file: File | null
   onFileChange: (file: File | null) => void
-  onFileUpload: () => void
+  onFileUpload: () => Promise<boolean>
   url: string
   onUrlChange: (value: string) => void
-  onUrlSubmit: (e: React.FormEvent) => void
+  onUrlSubmit: (e: React.FormEvent) => Promise<boolean>
   faqName: string
   onFaqNameChange: (value: string) => void
   faqs: FaqDraft[]
-  onFaqSubmit: (e: React.FormEvent) => void
+  onFaqSubmit: (e: React.FormEvent) => Promise<boolean>
   onAddFaqField: () => void
   onRemoveFaqField: (index: number) => void
   onUpdateFaqField: (index: number, field: "question" | "answer", value: string) => void
   onAgentCreated?: () => void
+  isDataModalOpen: boolean
+  setIsDataModalOpen: (open: boolean) => void
 }
 
 export function DataSourceManager({
@@ -70,10 +73,11 @@ export function DataSourceManager({
   onRemoveFaqField,
   onUpdateFaqField,
   onAgentCreated,
+  isDataModalOpen,
+  setIsDataModalOpen,
 }: DataSourceManagerProps) {
   const router = useRouter()
   const selectedBot = bots.find(b => b.id === selectedBotId)
-  const [isDataModalOpen, setIsDataModalOpen] = React.useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
 
   return (
@@ -179,7 +183,7 @@ export function DataSourceManager({
                       </div>
                       {file ? (
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-primary">{file.name}</span>
+                          <span className="text-sm font-bold text-primary truncate max-w-[200px] text-center">{file.name}</span>
                           <span className="text-[10px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                         </div>
                       ) : (
@@ -192,11 +196,11 @@ export function DataSourceManager({
                   </div>
                 </div>
                 <Button
-                  className="w-full h-12 rounded-none font-bold uppercase tracking-widest text-xs"
+                  className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
                   disabled={!file || actionLoading}
                   onClick={async () => {
-                    await onFileUpload();
-                    if (!actionLoading) setIsDataModalOpen(false);
+                    const success = await onFileUpload();
+                    if (success) setIsDataModalOpen(false);
                   }}
                 >
                   {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
@@ -205,26 +209,30 @@ export function DataSourceManager({
               </TabsContent>
 
               <TabsContent value="url" className="mt-6 space-y-4">
-                <form onSubmit={async (e) => {
-                  await onUrlSubmit(e);
-                  if (!actionLoading) setIsDataModalOpen(false);
-                }} className="space-y-4">
+                <div className="space-y-4">
                   <div className="grid gap-3">
                     <Label htmlFor="website-url" className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Website URL</Label>
                     <Input
                       id="website-url"
                       placeholder="https://example.com/docs"
-                      className="rounded-none h-12 bg-muted/10"
+                      className="rounded-none h-10 bg-muted/10 font-mono text-sm"
                       value={url}
                       onChange={(e) => onUrlChange(e.target.value)}
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full h-12 rounded-none font-bold uppercase tracking-widest text-xs" disabled={actionLoading}>
+                  <Button
+                    className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
+                    disabled={actionLoading || !url}
+                    onClick={async (e) => {
+                      const success = await onUrlSubmit(e as any);
+                      if (success) setIsDataModalOpen(false);
+                    }}
+                  >
                     {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
                     Sync Website
                   </Button>
-                </form>
+                </div>
               </TabsContent>
 
               <TabsContent value="faq" className="mt-6 space-y-6">
@@ -233,7 +241,7 @@ export function DataSourceManager({
                   <Input
                     id="faq-name"
                     placeholder="e.g. FAQ v1"
-                    className="rounded-none h-12 bg-muted/10"
+                    className="rounded-none h-10 bg-muted/10"
                     value={faqName}
                     onChange={(e) => onFaqNameChange(e.target.value)}
                   />
@@ -243,28 +251,35 @@ export function DataSourceManager({
                     <Label className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Questions & Answers</Label>
                   </div>
                   {faqs.map((faq, index) => (
-                    <div key={index} className="p-4 border border-border/50 bg-muted/10 space-y-3 relative group transition-colors hover:bg-muted/20">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => onRemoveFaqField(index)}
-                        disabled={faqs.length === 1}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      <Input
-                        placeholder="Question"
-                        className="rounded-none bg-background focus:ring-1 focus:ring-primary/30"
-                        value={faq.question}
-                        onChange={(e) => onUpdateFaqField(index, "question", e.target.value)}
-                      />
-                      <Input
-                        placeholder="Answer"
-                        className="rounded-none bg-background focus:ring-1 focus:ring-primary/30"
-                        value={faq.answer}
-                        onChange={(e) => onUpdateFaqField(index, "answer", e.target.value)}
-                      />
+                    <div key={index} className="p-4 border border-border/50 bg-muted/5 relative group transition-colors hover:border-primary/20">
+                      <div className="flex items-center justify-between mb-3">
+                        <Badge variant="outline" className="rounded-none border-primary/20 bg-primary/5 text-[9px] font-bold uppercase tracking-widest text-primary/70 px-1.5 py-0">
+                          FAQs #{index + 1}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 rounded-none text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          onClick={() => onRemoveFaqField(index)}
+                          disabled={faqs.length === 1}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        <Input
+                          placeholder="Question"
+                          className="rounded-none bg-background focus:ring-1 focus:ring-primary/30 h-10"
+                          value={faq.question}
+                          onChange={(e) => onUpdateFaqField(index, "question", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Answer"
+                          className="rounded-none bg-background focus:ring-1 focus:ring-primary/30 h-10"
+                          value={faq.answer}
+                          onChange={(e) => onUpdateFaqField(index, "answer", e.target.value)}
+                        />
+                      </div>
                     </div>
                   ))}
                   <Button variant="outline" type="button" className="w-full rounded-none border-dashed h-10 text-xs font-semibold hover:bg-muted/50" onClick={onAddFaqField}>
@@ -273,11 +288,11 @@ export function DataSourceManager({
                   </Button>
                 </div>
                 <Button
-                  className="w-full h-12 rounded-none font-bold uppercase tracking-widest text-xs"
-                  disabled={actionLoading}
+                  className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
+                  disabled={actionLoading || !faqName || faqs.some(f => !f.question || !f.answer)}
                   onClick={async (e) => {
-                    await onFaqSubmit(e);
-                    if (!actionLoading) setIsDataModalOpen(false);
+                    const success = await onFaqSubmit(e);
+                    if (success) setIsDataModalOpen(false);
                   }}
                 >
                   {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
@@ -286,8 +301,8 @@ export function DataSourceManager({
               </TabsContent>
             </Tabs>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </DialogContent >
+      </Dialog >
+    </div >
   )
 }

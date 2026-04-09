@@ -21,6 +21,7 @@ from app.api.routes.users import router as users_router
 from app.api.routes.bots import router as bots_router
 from app.api.routes.datasources import router as datasources_router
 from app.api.routes.chats import router as chats_router
+from app.api.routes.ai import router as ai_router
 
 
 # ── Lifespan: DB connect / disconnect ──
@@ -59,6 +60,7 @@ app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(bots_router, prefix=API_PREFIX)
 app.include_router(datasources_router, prefix=API_PREFIX)
 app.include_router(chats_router, prefix=API_PREFIX)
+app.include_router(ai_router, prefix=API_PREFIX)
 
 
 # ── Root ──

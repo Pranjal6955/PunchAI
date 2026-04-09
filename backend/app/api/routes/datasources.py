@@ -7,6 +7,7 @@ import os
 import shutil
 from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from prisma import Json
 from app.core.database import db
 from app.schemas.datasource import (
     DataSourceResponse,
@@ -54,7 +55,11 @@ async def upload_pdf(
     content = extract_text_from_pdf(file_path)
     if content:
         await db.documentchunk.create(
-            data={"content": content, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": botId}}}
+            data={
+                "content": content,
+                "source": {"connect": {"id": ds.id}},
+                "bot": {"connect": {"id": botId}}
+            }
         )
         process_and_store(
             bot_id=botId, source_id=ds.id, raw_text=content, 
@@ -85,7 +90,11 @@ async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_use
     content = extract_text_from_url(str(payload.url))
     if content:
         await db.documentchunk.create(
-            data={"content": content, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}}
+            data={
+                "content": content,
+                "source": {"connect": {"id": ds.id}},
+                "bot": {"connect": {"id": payload.botId}}
+            }
         )
         process_and_store(
             bot_id=payload.botId, source_id=ds.id, raw_text=content, 
@@ -113,7 +122,12 @@ async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_curre
     for item in payload.faqs:
         # 1. Create FAQ record
         faq_record = await db.faq.create(
-            data={"question": item.question, "answer": item.answer, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}}
+            data={
+                "question": item.question,
+                "answer": item.answer,
+                "source": {"connect": {"id": ds.id}},
+                "bot": {"connect": {"id": payload.botId}}
+            }
         )
         
         # 2. Specialized FAQ Cleaning & Formatting (standardized Q: / A: prefix)
@@ -121,7 +135,12 @@ async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_curre
         full_faq_text += faq_text + "\n\n"
 
         await db.documentchunk.create(
-            data={"content": faq_text, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}, "metadata": {"faqId": faq_record.id}}
+            data={
+                "content": faq_text,
+                "source": {"connect": {"id": ds.id}},
+                "bot": {"connect": {"id": payload.botId}},
+                "metadata": Json({"faqId": faq_record.id})
+            }
         )
 
     process_and_store(

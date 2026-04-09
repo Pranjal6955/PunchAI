@@ -22,6 +22,7 @@ import {
     listFaqs,
     updateFaq,
     deleteFaq,
+    deleteChunk,
     FAQ,
     DocumentChunk
 } from "@/lib/api-session"
@@ -39,6 +40,7 @@ export default function DataSourcesPage() {
     const [sourceContent, setSourceContent] = React.useState<{ chunks: DocumentChunk[], faqs: FAQ[] }>({ chunks: [], faqs: [] })
     const [contentLoading, setContentLoading] = React.useState(false)
     const [itemUpdating, setItemUpdating] = React.useState<string | null>(null)
+    const [isDataModalOpen, setIsDataModalOpen] = React.useState(false)
 
     // Form states
     const [url, setUrl] = React.useState("")
@@ -83,7 +85,7 @@ export default function DataSourcesPage() {
     }, [selectedBotId])
 
     const handleFileUpload = async () => {
-        if (!selectedBotId || !file) return
+        if (!selectedBotId || !file) return false
         setActionLoading(true)
         try {
             const success = await uploadDataSource(selectedBotId, file)
@@ -93,12 +95,15 @@ export default function DataSourcesPage() {
                 // Refresh sources
                 const sources = await getDataSources(selectedBotId)
                 setDataSources(sources)
+                return true
             } else {
                 toast.error("Failed to upload file")
+                return false
             }
         } catch (error) {
             console.error("Upload error:", error)
             toast.error("An error occurred during upload")
+            return false
         } finally {
             setActionLoading(false)
         }
@@ -106,7 +111,7 @@ export default function DataSourcesPage() {
 
     const handleUrlAdd = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!selectedBotId || !url) return
+        if (!selectedBotId || !url) return false
         setActionLoading(true)
         try {
             const success = await addUrlDataSource(selectedBotId, url)
@@ -116,12 +121,15 @@ export default function DataSourcesPage() {
                 // Refresh sources
                 const sources = await getDataSources(selectedBotId)
                 setDataSources(sources)
+                return true
             } else {
                 toast.error("Failed to sync website")
+                return false
             }
         } catch (error) {
             console.error("URL error:", error)
             toast.error("An error occurred during URL sync")
+            return false
         } finally {
             setActionLoading(false)
         }
@@ -130,7 +138,7 @@ export default function DataSourcesPage() {
         e.preventDefault()
         if (!selectedBotId || !faqName || faqs.some(f => !f.question || !f.answer)) {
             toast.error("Please fill in all FAQ fields")
-            return
+            return false
         }
         setActionLoading(true)
         try {
@@ -142,12 +150,15 @@ export default function DataSourcesPage() {
                 // Refresh sources
                 const sources = await getDataSources(selectedBotId)
                 setDataSources(sources)
+                return true
             } else {
                 toast.error("Failed to add FAQs")
+                return false
             }
         } catch (error) {
             console.error("FAQ error:", error)
             toast.error("An error occurred adding FAQs")
+            return false
         } finally {
             setActionLoading(false)
         }
@@ -207,6 +218,22 @@ export default function DataSourcesPage() {
             toast.error("Failed to update content")
         } finally {
             setItemUpdating(null)
+        }
+    }
+
+    const handleDeleteChunk = async (chunkId: string) => {
+        if (!confirm("Delete this text segment?")) return
+        try {
+            const success = await deleteChunk(chunkId)
+            if (success) {
+                setSourceContent(prev => ({
+                    ...prev,
+                    chunks: prev.chunks.filter(c => c.id !== chunkId)
+                }))
+                toast.success("Segment removed")
+            }
+        } catch {
+            toast.error("Failed to delete segment")
         }
     }
 
@@ -299,6 +326,8 @@ export default function DataSourcesPage() {
                             onRemoveFaqField={removeFaqField}
                             onUpdateFaqField={updateFaqField}
                             onAgentCreated={fetchBots}
+                            isDataModalOpen={isDataModalOpen}
+                            setIsDataModalOpen={setIsDataModalOpen}
                         />
                     </div>
                 </div>
@@ -312,6 +341,7 @@ export default function DataSourcesPage() {
                             sourcesLoading={sourcesLoading}
                             onViewDetails={handleViewDetails}
                             onDelete={handleDelete}
+                            onAddSource={() => setIsDataModalOpen(true)}
                         />
                     </div>
                 </div>
@@ -325,6 +355,7 @@ export default function DataSourcesPage() {
                 contentLoading={contentLoading}
                 itemUpdating={itemUpdating}
                 onUpdateChunk={handleUpdateChunk}
+                onDeleteChunk={handleDeleteChunk}
                 onUpdateFaq={handleUpdateFaq}
                 onDeleteFaq={handleDeleteFaq}
             />

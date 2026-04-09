@@ -21,10 +21,13 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 
 def clean_text(text: str) -> str:
-    """Extra cleaning logic for extracted raw text."""
-    # Remove multiple newlines, unnecessary whitespace, etc.
-    cleaned = " ".join(text.split())
-    return cleaned
+    """Extra cleaning logic for extracted raw text while preserving structure."""
+    import re
+    # Normalize horizontal whitespace (tabs/multiple spaces) to single space
+    text = re.sub(r'[ \t]+', ' ', text)
+    # Normalize multiple blank lines to exactly two newlines
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    return text.strip()
 
 
 def process_and_store(
