@@ -12,6 +12,7 @@ import {
     ExternalLink,
     EyeIcon
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import {
     DropdownMenu,
@@ -46,8 +47,15 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                     {new Date(bot.createdAt).toLocaleDateString()}
                 </div>
                 <div className="col-span-2 flex justify-end gap-2">
-                    <Link href={`/dashboard/chatbot/${bot.id}`}>
-                        <Button variant="ghost" size="icon" className="rounded-none">
+                    <Link
+                        href={(bot.dataSourceCount || 0) === 0 ? `/dashboard/dataSource?botId=${bot.id}` : `/dashboard/chatbot/${bot.id}/Playground`}
+                        className=""
+                    >
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="rounded-none"
+                        >
                             <MessageSquare className="h-4 w-4" />
                         </Button>
                     </Link>
@@ -93,10 +101,16 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="rounded-none">
-                        <DropdownMenuItem asChild className="cursor-pointer rounded-none">
-                            <Link href={`/dashboard/chatbot/${bot.id}`}>
+                        <DropdownMenuItem
+                            asChild
+                            className="cursor-pointer rounded-none"
+                        >
+                            <Link
+                                href={(bot.dataSourceCount || 0) === 0 ? `/dashboard/dataSource?botId=${bot.id}` : `/dashboard/chatbot/${bot.id}/Playground`}
+                                className=""
+                            >
                                 <MessageSquare className="mr-2 h-4 w-4" />
-                                Open Chat
+                                {(bot.dataSourceCount || 0) === 0 ? "Add Data to Chat" : "Open Chat"}
                             </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -124,10 +138,15 @@ export function BotCard({ bot, onDelete, viewMode }: BotCardProps) {
                         View Details
                     </Button>
                 </Link>
-                <Link href={`/dashboard/chatbot/${bot.id}`} className="w-full">
-                    <Button className="w-full rounded-none gap-2 h-9 text-xs">
+                <Link
+                    href={(bot.dataSourceCount || 0) === 0 ? `/dashboard/dataSource?botId=${bot.id}` : `/dashboard/chatbot/${bot.id}/Playground`}
+                    className="w-full"
+                >
+                    <Button
+                        className="w-full rounded-none gap-2 h-9 text-xs"
+                    >
                         <MessageSquare className="h-4 w-4" />
-                        Chat with Agent
+                        {(bot.dataSourceCount || 0) === 0 ? "Add Data to Chat" : "Chat with Agent"}
                     </Button>
                 </Link>
             </CardFooter>

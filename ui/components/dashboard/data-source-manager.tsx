@@ -51,6 +51,7 @@ interface DataSourceManagerProps {
   onAgentCreated?: () => void
   isDataModalOpen: boolean
   setIsDataModalOpen: (open: boolean) => void
+  hasDataSources: boolean
 }
 
 export function DataSourceManager({
@@ -75,6 +76,7 @@ export function DataSourceManager({
   onAgentCreated,
   isDataModalOpen,
   setIsDataModalOpen,
+  hasDataSources,
 }: DataSourceManagerProps) {
   const router = useRouter()
   const selectedBot = bots.find(b => b.id === selectedBotId)
@@ -120,6 +122,26 @@ export function DataSourceManager({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Playground Shortcut */}
+      {selectedBotId && (
+        <Button
+          variant="secondary"
+          className="rounded-none gap-2 h-10 px-4 border-border/50 shadow-sm"
+          onClick={() => {
+            if (hasDataSources) {
+              router.push(`/dashboard/chatbot/${selectedBotId}/Playground`);
+            } else {
+              setIsDataModalOpen(true);
+            }
+          }}
+        >
+          <MessageSquareText className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">
+            {hasDataSources ? "Chat" : "Add Data to Chat"}
+          </span>
+        </Button>
+      )}
 
       <CreateAgentDialog
         open={isCreateDialogOpen}
@@ -196,7 +218,7 @@ export function DataSourceManager({
                   </div>
                 </div>
                 <Button
-                  className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
+                  className="w-full h-10 rounded-none text-sm"
                   disabled={!file || actionLoading}
                   onClick={async () => {
                     const success = await onFileUpload();
@@ -222,7 +244,7 @@ export function DataSourceManager({
                     />
                   </div>
                   <Button
-                    className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
+                    className="w-full h-10 rounded-none text-sm"
                     disabled={actionLoading || !url}
                     onClick={async (e) => {
                       const success = await onUrlSubmit(e as any);
@@ -288,7 +310,7 @@ export function DataSourceManager({
                   </Button>
                 </div>
                 <Button
-                  className="w-full h-10 rounded-none font-bold uppercase tracking-widest text-xs"
+                  className="w-full h-10 rounded-none text-sm"
                   disabled={actionLoading || !faqName || faqs.some(f => !f.question || !f.answer)}
                   onClick={async (e) => {
                     const success = await onFaqSubmit(e);

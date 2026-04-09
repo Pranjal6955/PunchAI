@@ -176,9 +176,16 @@ export default function AgentDashboard() {
                         </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                        <Button className="rounded-none px-6">
-                            Test your Agent
-                        </Button>
+                        <Link
+                            href={dataSources.length === 0 ? `/dashboard/dataSource?botId=${Id}` : `/dashboard/chatbot/${Id}/Playground`}
+                            className=""
+                        >
+                            <Button
+                                className="rounded-none px-6"
+                            >
+                                {dataSources.length === 0 ? "Add Data to Test" : "Test your Agent"}
+                            </Button>
+                        </Link>
                         <Button
                             variant="destructive"
                             className="rounded-none px-6"

@@ -26,8 +26,12 @@ import {
     FAQ,
     DocumentChunk
 } from "@/lib/api-session"
+import { useSearchParams } from "next/navigation"
 
 export default function DataSourcesPage() {
+    const searchParams = useSearchParams()
+    const botIdParam = searchParams.get("botId")
+
     const [bots, setBots] = React.useState<Bot[]>([])
     const [selectedBotId, setSelectedBotId] = React.useState<string>("")
     const [dataSources, setDataSources] = React.useState<DataSource[]>([])
@@ -52,7 +56,11 @@ export default function DataSourcesPage() {
         try {
             const userBots = await getBots()
             setBots(userBots)
-            if (userBots.length > 0 && !selectedBotId) {
+
+            // Priority: Query param > Current state > First bot
+            if (botIdParam && userBots.some(b => b.id === botIdParam)) {
+                setSelectedBotId(botIdParam)
+            } else if (userBots.length > 0 && !selectedBotId) {
                 setSelectedBotId(userBots[0].id)
             }
         } catch (error) {
@@ -61,7 +69,7 @@ export default function DataSourcesPage() {
         } finally {
             setLoading(false)
         }
-    }, [selectedBotId])
+    }, [selectedBotId, botIdParam])
 
     React.useEffect(() => {
         void fetchBots()
@@ -185,9 +193,6 @@ export default function DataSourcesPage() {
         setContentLoading(true)
         try {
             if (source.type === "TEXT") {
-                // For FAQ sources, we fetch specific FAQs
-                // Note: listFaqs takes botId, then we filter by sourceId if needed
-                // Based on backend, chunks are linked to sourceId. FAQs are also linked to sourceId.
                 const allFaqs = await listFaqs(selectedBotId)
                 const sourceFaqs = allFaqs.filter(f => f.sourceId === source.id)
                 setSourceContent({ chunks: [], faqs: sourceFaqs })
@@ -328,13 +333,12 @@ export default function DataSourcesPage() {
                             onAgentCreated={fetchBots}
                             isDataModalOpen={isDataModalOpen}
                             setIsDataModalOpen={setIsDataModalOpen}
+                            hasDataSources={dataSources.length > 0}
                         />
                     </div>
                 </div>
 
                 <div className="flex flex-col gap-8">
-
-                    {/* Left Side: Existing Sources List */}
                     <div className="flex-1">
                         <ActiveSourcesList
                             dataSources={dataSources}
@@ -347,7 +351,6 @@ export default function DataSourcesPage() {
                 </div>
             </main>
 
-            {/* Source Details Dialog */}
             <SourceDetailsDialog
                 source={viewingSource}
                 onClose={() => setViewingSource(null)}

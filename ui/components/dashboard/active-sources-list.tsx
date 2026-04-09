@@ -166,7 +166,7 @@ export function ActiveSourcesList({
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 p-6 overflow-y-auto">
+                <CardContent className="flex-1 p-6 pt-1 overflow-y-auto">
                     {sourcesLoading ? (
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                             {[1, 2, 3, 4].map((i) => (
@@ -185,7 +185,7 @@ export function ActiveSourcesList({
                                 </p>
                             </div>
                             <Button
-                                className="rounded-none gap-2 font-bold px-6 h-11 border-primary/30"
+                                className="rounded-none text-sm"
                                 onClick={onAddSource}
                             >
                                 <Plus className="h-4 w-4" />
