@@ -1,4 +1,10 @@
-const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+export const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+
+export const getAvatarUrl = (path?: string) => {
+  if (!path) return undefined;
+  if (path.startsWith("http")) return path;
+  return `${apiBase}${path}`;
+};
 
 const buildApiUrl = (path: string) => (apiBase ? `${apiBase}${path}` : path);
 
@@ -156,6 +162,33 @@ export const logoutSession = async (): Promise<void> => {
 
 export const getProfile = async (): Promise<User | null> => {
   const res = await authorizedFetch("/api/auth/me");
+  if (!res.ok) return null;
+  return await parseJsonSafely<User>(res);
+};
+
+export const updateProfile = async (
+  userId: string,
+  data: { name?: string; password?: string; avatar?: string }
+): Promise<User | null> => {
+  const res = await authorizedFetch(`/api/users/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<User>(res);
+};
+
+export const uploadAvatar = async (file: File): Promise<User | null> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await authorizedFetch("/api/users/me/avatar", {
+    method: "POST",
+    body: formData,
+  });
   if (!res.ok) return null;
   return await parseJsonSafely<User>(res);
 };

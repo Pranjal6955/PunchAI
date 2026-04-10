@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db
+from fastapi.staticfiles import StaticFiles
+import os
 
 # ── Route imports ──
 from app.api.routes.health import router as health_router
@@ -61,6 +63,10 @@ app.include_router(bots_router, prefix=API_PREFIX)
 app.include_router(datasources_router, prefix=API_PREFIX)
 app.include_router(chats_router, prefix=API_PREFIX)
 app.include_router(ai_router, prefix=API_PREFIX)
+
+# ── Static Files ──
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # ── Root ──

@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { logoutSession, getProfile } from "@/lib/api-session";
+import { logoutSession, getProfile, getAvatarUrl } from "@/lib/api-session";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
@@ -114,7 +114,7 @@ export function DashboardSidebar() {
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src={user?.avatar} alt={user?.name ?? "User"} />
+                    <AvatarImage src={getAvatarUrl(user?.avatar)} alt={user?.name ?? "User"} />
                     <AvatarFallback className="rounded-lg">
                       {user?.name?.substring(0, 2).toUpperCase() ?? "AI"}
                     </AvatarFallback>
@@ -135,7 +135,7 @@ export function DashboardSidebar() {
                 <DropdownMenuLabel className="p-0 font-normal">
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar className="h-8 w-8 rounded-lg">
-                      <AvatarImage src={user?.avatar} alt={user?.name ?? "User"} />
+                      <AvatarImage src={getAvatarUrl(user?.avatar)} alt={user?.name ?? "User"} />
                       <AvatarFallback className="rounded-lg">
                         {user?.name?.substring(0, 2).toUpperCase() ?? "AI"}
                       </AvatarFallback>
@@ -154,20 +154,12 @@ export function DashboardSidebar() {
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/account">
                     <BadgeCheck className="mr-2 size-4" />
                     Account
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <CreditCard className="mr-2 size-4" />
-                    Billing
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Bell className="mr-2 size-4" />
-                    Notifications
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:bg-destructive/10 focus:text-destructive"
