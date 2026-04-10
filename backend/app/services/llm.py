@@ -21,7 +21,7 @@ groq_client = Groq(
 )
 
 
-def build_rag_prompt(persona: Optional[str], context: List[str], question: str) -> str:
+def build_rag_prompt(persona: Optional[str], context: List[str], question: str, history: List[dict] = None) -> str:
     """Constructs a prompt template for the RAG response with a focus on politeness and simplicity."""
     
     context_text = "\n---\n".join(context)
@@ -29,17 +29,29 @@ def build_rag_prompt(persona: Optional[str], context: List[str], question: str) 
     # Use the bot's custom persona or a default base prompt
     base_persona = persona if persona else "You are a helpful and professional AI assistant."
     
+    history_text = ""
+    if history:
+        history_text = "### RECENT CHAT HISTORY\n"
+        for msg in history:
+            # Handle both object (from Prisma) and dict (if passed manually)
+            role = getattr(msg, 'role', msg.get('role', 'USER'))
+            content = getattr(msg, 'content', msg.get('content', ''))
+            history_text += f"{role}: {content}\n"
+        history_text += "\n---\n"
+
     prompt = f"""
 ### PERSONA
 {base_persona}
 
 ### TASK
-You are replying to a user in a chat conversation. Your goal is to answer the user's question accurately using only the provided context. Follow these strict guidelines:
+You are replying to a user in a chat conversation. Your goal is to answer the user's question accurately using the provided context and considering the recent conversation history. Follow these strict guidelines:
 1. **Be Polite & Conversational**: Always maintain a warm, respectful, and helpful tone. Speak like a friendly professional.
 2. **Simple Language**: Explain concepts in simple, layman terms. Avoid complex jargon or technical speak unless absolutely necessary to explain the data.
-3. **Accuracy**: Use ONLY the information in the context provided below. Do not use outside knowledge.
-4. **Uncertainty**: If the information is not present in the context, politely explain that you don't have that specific information in your records and offer to help with something else.
+3. **Accuracy**: Use the information in the context provided below. Do not use outside knowledge.
+4. **Contextual Awareness**: If the user refers to previous parts of the conversation, use the RECENT CHAT HISTORY to understand their request.
+5. **Uncertainty**: If the information is not present in the context, politely explain that you don't have that specific information in your records and offer to help with something else.
 
+{history_text}
 ### CONTEXT
 {context_text}
 

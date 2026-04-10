@@ -75,10 +75,25 @@ async def add_message(
     await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
 
     # 3. LLM Generation (OpenRouter with Groq Fallback)
+    
+    # Fetch recent chat history (last 5 messages before the current one)
+    history = await db.message.find_many(
+        where={
+            "chatId": chat_id,
+            "NOT": {
+                "id": user_msg.id
+            }
+        },
+        order_by={"createdAt": "desc"},
+        take=5
+    )
+    history.reverse()  # Chronological order
+
     prompt = build_rag_prompt(
         persona=chat.bot.botPersona, 
         context=context_chunks, 
-        question=payload.content
+        question=payload.content,
+        history=history
     )
     
     ai_text = generate_llm_response(prompt)
