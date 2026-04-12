@@ -36,6 +36,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface ActiveSourcesListProps {
     dataSources: DataSource[]
@@ -43,6 +44,10 @@ interface ActiveSourcesListProps {
     onViewDetails: (source: DataSource) => void
     onDelete: (id: string) => void
     onAddSource?: () => void
+    selectedIds: string[]
+    onSelect: (id: string) => void
+    onSelectAll: (ids: string[]) => void
+    onBulkDelete: () => void
 }
 
 export function ActiveSourcesList({
@@ -50,7 +55,11 @@ export function ActiveSourcesList({
     sourcesLoading,
     onViewDetails,
     onDelete,
-    onAddSource
+    onAddSource,
+    selectedIds,
+    onSelect,
+    onSelectAll,
+    onBulkDelete
 }: ActiveSourcesListProps) {
     const [searchQuery, setSearchQuery] = React.useState("")
     const [filterType, setFilterType] = React.useState<string | null>(null)
@@ -96,7 +105,7 @@ export function ActiveSourcesList({
 
             {/* List Container */}
             <Card className="rounded-none border-white/5 bg-black/40 backdrop-blur-md overflow-hidden flex flex-col min-h-[500px]">
-                <CardHeader className="border-b border-white/5 space-y-4">
+                <CardHeader className="space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
                             <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -164,6 +173,39 @@ export function ActiveSourcesList({
                             </DropdownMenu>
                         </div>
                     </div>
+
+                    {filteredSources.length > 0 && (
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 group cursor-pointer" onClick={() => onSelectAll(filteredSources.map(s => s.id))}>
+                                <Checkbox
+                                    checked={filteredSources.length > 0 && filteredSources.every(s => selectedIds.includes(s.id))}
+                                    className="rounded-none border-white/20 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                />
+                                <span className="text-[10px] font-bold uppercase tracking-widest transition-colors group-hover:text-primary">
+                                    {selectedIds.length === filteredSources.length ? "DESELECT ALL" : "SELECT ALL"}
+                                </span>
+                            </div>
+
+                            {selectedIds.length > 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="flex items-center gap-3"
+                                >
+                                    <div className="h-4 w-px bg-white/10" />
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="h-7 rounded-none px-3 text-[10px] font-black uppercase tracking-widest border border-destructive/50 hover:bg-destructive hover:text-white transition-all"
+                                        onClick={onBulkDelete}
+                                    >
+                                        <Trash2 className="mr-2 h-3 w-3" />
+                                        DELETE SELECTED ({selectedIds.length})
+                                    </Button>
+                                </motion.div>
+                            )}
+                        </div>
+                    )}
                 </CardHeader>
 
                 <CardContent className="flex-1 p-6 pt-1 overflow-y-auto">
@@ -196,9 +238,17 @@ export function ActiveSourcesList({
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                             {filteredSources.map((source) => (
                                 <div key={source.id} className="group relative">
-                                    <div className="relative flex flex-col bg-white/[0.03] border border-white/10 rounded-none p-5 transition-all duration-300">
+                                    <div className={cn(
+                                        "relative flex flex-col bg-white/[0.03] border border-white/10 rounded-none p-5 transition-all duration-300",
+                                        selectedIds.includes(source.id) && "bg-primary/[0.05] border-primary/30"
+                                    )}>
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="flex items-center gap-4 flex-1">
+                                                <Checkbox
+                                                    checked={selectedIds.includes(source.id)}
+                                                    onCheckedChange={() => onSelect(source.id)}
+                                                    className="rounded-none border-white/20 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                />
                                                 <div className={cn(
                                                     "h-12 w-12 rounded-none flex items-center justify-center border transition-all duration-300",
                                                     source.type === "FILE" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :

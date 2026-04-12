@@ -40,6 +40,7 @@ export default function DataSourcesPage() {
     const [loading, setLoading] = React.useState(true)
     const [sourcesLoading, setSourcesLoading] = React.useState(false)
     const [actionLoading, setActionLoading] = React.useState(false)
+    const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([])
 
     // View/Edit state
     const [viewingSource, setViewingSource] = React.useState<DataSource | null>(null)
@@ -180,6 +181,7 @@ export default function DataSourcesPage() {
             const success = await deleteDataSource(dsId)
             if (success) {
                 setDataSources(prev => prev.filter(ds => ds.id !== dsId))
+                setSelectedSourceIds(prev => prev.filter(id => id !== dsId))
                 if (viewingSource?.id === dsId) setViewingSource(null)
                 toast.success("Data source removed")
             } else {
@@ -187,6 +189,47 @@ export default function DataSourcesPage() {
             }
         } catch {
             toast.error("An error occurred during deletion")
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (!selectedSourceIds.length) return
+        if (!confirm(`Are you sure you want to delete ${selectedSourceIds.length} data sources?`)) return
+
+        setActionLoading(true)
+        let successCount = 0
+        try {
+            for (const id of selectedSourceIds) {
+                const success = await deleteDataSource(id)
+                if (success) {
+                    successCount++
+                }
+            }
+
+            setDataSources(prev => prev.filter(ds => !selectedSourceIds.includes(ds.id)))
+            setSelectedSourceIds([])
+            toast.success(`Successfully deleted ${successCount} sources`)
+        } catch (error) {
+            console.error("Bulk delete error:", error)
+            toast.error("An error occurred during bulk deletion")
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    const toggleSelectSource = (id: string) => {
+        setSelectedSourceIds(prev =>
+            prev.includes(id)
+                ? prev.filter(i => i !== id)
+                : [...prev, id]
+        )
+    }
+
+    const handleSelectAll = (ids: string[]) => {
+        if (selectedSourceIds.length === ids.length) {
+            setSelectedSourceIds([])
+        } else {
+            setSelectedSourceIds(ids)
         }
     }
 
@@ -362,6 +405,10 @@ export default function DataSourcesPage() {
                                 onViewDetails={handleViewDetails}
                                 onDelete={handleDelete}
                                 onAddSource={() => setIsDataModalOpen(true)}
+                                selectedIds={selectedSourceIds}
+                                onSelect={toggleSelectSource}
+                                onSelectAll={handleSelectAll}
+                                onBulkDelete={handleBulkDelete}
                             />
                         </div>
                     </div>

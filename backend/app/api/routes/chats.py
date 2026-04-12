@@ -84,7 +84,7 @@ async def add_message(
                 "id": user_msg.id
             }
         },
-        order_by={"createdAt": "desc"},
+        order={"createdAt": "desc"},
         take=5
     )
     history.reverse()  # Chronological order
@@ -116,7 +116,7 @@ async def add_message(
 async def get_chat(chat_id: str, current_user=Depends(get_current_user)):
     chat = await db.chat.find_unique(
         where={"id": chat_id},
-        include={"messages": {"order_by": {"createdAt": "asc"}}}
+        include={"messages": {"order": {"createdAt": "asc"}}}
     )
     if not chat or chat.userId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")

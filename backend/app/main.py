@@ -24,6 +24,7 @@ from app.api.routes.bots import router as bots_router
 from app.api.routes.datasources import router as datasources_router
 from app.api.routes.chats import router as chats_router
 from app.api.routes.ai import router as ai_router
+from app.api.routes.external import router as external_router
 
 
 # ── Lifespan: DB connect / disconnect ──
@@ -45,6 +46,8 @@ app = FastAPI(
 )
 
 # ── CORS Middleware ──
+# We allow specific origins with credentials for the dashboard, 
+# and we will handle external widget logic by ensuring the origins are permissive.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -63,6 +66,7 @@ app.include_router(bots_router, prefix=API_PREFIX)
 app.include_router(datasources_router, prefix=API_PREFIX)
 app.include_router(chats_router, prefix=API_PREFIX)
 app.include_router(ai_router, prefix=API_PREFIX)
+app.include_router(external_router, prefix=API_PREFIX)
 
 # ── Static Files ──
 os.makedirs("uploads", exist_ok=True)

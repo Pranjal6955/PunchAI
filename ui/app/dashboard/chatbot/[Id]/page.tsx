@@ -8,11 +8,13 @@ import {
     updateBot,
     deleteBot,
     getDataSources,
+    generateBotApiKey,
     Bot,
     DataSource
 } from "@/lib/api-session";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PERSONA_TEMPLATES, DEFAULT_CSS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,9 +24,11 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    Code2, Terminal, Copy, ExternalLink, ShieldCheck, Zap,
-    Loader2, FileText, Globe, MessageSquareText, Plus, CheckCircle2, ChevronRight, Database, UserRound,
-    Trash2
+    ChevronRight, Save, Link2, Trash, Settings,
+    MessageSquare, Database, Share2, Globe, FileText, MessageSquareText,
+    ArrowLeft, Loader2, Play, Code2, Terminal, Copy, ExternalLink, ShieldCheck, Zap,
+    Plus, CheckCircle2, UserRound,
+    Trash2, Palette, Eye, EyeOff
 } from "lucide-react";
 import {
     Select,
@@ -33,29 +37,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { IntegrationTab } from "@/components/chatbot/IntegrationTab";
 
-const PERSONA_TEMPLATES = [
-    {
-        label: "Helpful Assistant",
-        value: "You are a helpful, friendly, and concise AI assistant. Your goal is to provide accurate information and assist the user with their queries in a professional manner.",
-    },
-    {
-        label: "Technical Expert",
-        value: "You are an expert software engineer and technical consultant. Provide deep technical insights, code examples, and architectural advice. Be precise and thorough.",
-    },
-    {
-        label: "Customer Support",
-        value: "You are a highly empathetic customer support representative. Aim to resolve issues with patience and clarity. Always be polite and offer to help further.",
-    },
-    {
-        label: "Creative Writer",
-        value: "You are a versatile creative writer. Help the user brainstorm ideas, write stories, poems, or marketing copy. Use vivid language and be highly imaginative.",
-    },
-    {
-        label: "Data Analyst",
-        value: "You are a data science expert. Help users interpret data, write SQL queries, and explain statistical concepts in simple terms.",
-    },
-];
+
 
 export default function AgentDashboard() {
     const { Id } = useParams();
@@ -71,7 +55,9 @@ export default function AgentDashboard() {
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [persona, setPersona] = React.useState("");
+    const [customCss, setCustomCss] = React.useState("");
     const [selectedTemplate, setSelectedTemplate] = React.useState<string | undefined>(undefined);
+    const [showApiKey, setShowApiKey] = React.useState(false);
 
     React.useEffect(() => {
         const fetchData = async () => {
@@ -89,6 +75,7 @@ export default function AgentDashboard() {
                     setDescription(botData.description || "");
                     const loadedPersona = botData.botPersona || "";
                     setPersona(loadedPersona);
+                    setCustomCss(botData.customCss || DEFAULT_CSS);
                     // Pre-select the matching template if the stored persona matches one
                     const matchedTemplate = PERSONA_TEMPLATES.find(t => t.value === loadedPersona);
                     setSelectedTemplate(matchedTemplate?.label ?? undefined);
@@ -107,8 +94,8 @@ export default function AgentDashboard() {
         void fetchData();
     }, [Id, router]);
 
-    const handleUpdate = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleUpdate = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!bot || !Id) return;
 
         setUpdating(true);
@@ -116,7 +103,8 @@ export default function AgentDashboard() {
             const updatedBot = await updateBot(Id as string, {
                 name,
                 description,
-                botPersona: persona
+                botPersona: persona,
+                customCss: customCss
             });
 
             if (updatedBot) {
@@ -154,6 +142,26 @@ export default function AgentDashboard() {
         }
     };
 
+    const handleGenerateApiKey = async () => {
+        if (!Id) return;
+        setUpdating(true);
+        try {
+            const updatedBot = await generateBotApiKey(Id as string);
+            if (updatedBot) {
+                setBot(updatedBot);
+                setShowApiKey(true);
+                toast.success("API Key generated successfully");
+            } else {
+                toast.error("Failed to generate API Key");
+            }
+        } catch (error) {
+            console.error("Generate API Key error:", error);
+            toast.error("An error occurred while generating API Key");
+        } finally {
+            setUpdating(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="p-8 space-y-8 animate-pulse">
@@ -176,6 +184,12 @@ export default function AgentDashboard() {
                         </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
+                        <Link href="/dashboard/dataSource" className="hidden md:block">
+                            <Button variant="outline" className="rounded-none px-6">
+                                <FileText className="mr-2 h-4 w-4" />
+                                Knowledge Bases
+                            </Button>
+                        </Link>
                         <Link
                             href={dataSources.length === 0 ? `/dashboard/dataSource?botId=${Id}` : `/dashboard/chatbot/${Id}/Playground`}
                             className=""
@@ -202,154 +216,185 @@ export default function AgentDashboard() {
                     </div>
                 </div>
 
-                <div className="grid gap-8 lg:grid-cols-3">
-                    <div className="lg:col-span-2">
-                        <Card className="rounded-none border shadow-sm bg-muted/40 transition-all border-border/50">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-2xl font-semibold">Agent Settings</CardTitle>
-                                <CardDescription>
-                                    Update your agent's identity and behavioral instructions.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <form id="update-bot-form" onSubmit={handleUpdate} className="space-y-6">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="grid gap-3">
-                                            <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
-                                            <Input
-                                                id="name"
-                                                placeholder="e.g. Customer Support"
-                                                value={name}
-                                                onChange={(e) => setName(e.target.value)}
-                                                className="bg-background rounded-none"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="grid gap-3">
-                                            <Label htmlFor="persona-template" className="text-sm font-medium">Persona Template</Label>
-                                            <Select
-                                                value={selectedTemplate ?? ""}
-                                                onValueChange={(label) => {
-                                                    const template = PERSONA_TEMPLATES.find(t => t.label === label);
-                                                    if (template) {
-                                                        setSelectedTemplate(template.label);
-                                                        setPersona(template.value);
-                                                    } else {
-                                                        setSelectedTemplate(undefined);
-                                                    }
-                                                }}
-                                            >
-                                                <SelectTrigger id="persona-template" className="rounded-none bg-background">
-                                                    <SelectValue placeholder="Select a template..." />
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded-none">
-                                                    {PERSONA_TEMPLATES.map((t) => (
-                                                        <SelectItem key={t.label} value={t.label}>
-                                                            {t.label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-3">
-                                        <Label htmlFor="description" className="text-sm font-medium">Description</Label>
-                                        <Input
-                                            id="description"
-                                            placeholder="A brief description of what this agent does"
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            className="bg-background rounded-none"
-                                        />
-                                    </div>
-                                    <div className="grid gap-3">
-                                        <Label htmlFor="persona" className="text-sm font-medium">Instructions / Persona</Label>
-                                        <Textarea
-                                            id="persona"
-                                            placeholder="Describe how the agent should behave, its personality, and expertise..."
-                                            value={persona}
-                                            onChange={(e) => setPersona(e.target.value)}
-                                            className="min-h-[150px] bg-background resize-none rounded-none"
-                                            required
-                                        />
-                                        <p className="text-xs text-muted-foreground">
-                                            Select a template above to auto-fill, or write a fully custom prompt below.
-                                        </p>
-                                    </div>
-                                </form>
-                            </CardContent>
-                            <CardFooter className="pt-2">
-                                <Button
-                                    type="submit"
-                                    form="update-bot-form"
-                                    disabled={updating}
-                                    className="rounded-none px-8 h-11"
-                                >
-                                    {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Save Changes
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    </div>
+                <Tabs defaultValue="config" className="w-full space-y-8">
+                    <TabsList className="rounded-none bg-muted/50 p-1 h-12">
+                        <TabsTrigger value="config" className="rounded-none px-8 h-10 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            Configuration
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="integration"
+                            disabled={dataSources.length === 0}
+                            className="rounded-none px-8 h-10 data-[state=active]:bg-background data-[state=active]:shadow-sm flex items-center gap-2"
+                        >
+                            {dataSources.length === 0 && <ShieldCheck className="h-3.5 w-3.5 opacity-70" />}
+                            Integration
+                        </TabsTrigger>
+                    </TabsList>
 
-                    <div className="lg:col-span-1 space-y-6">
-                        <Card className="rounded-none border shadow-sm bg-muted/40 h-full border-border/50">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-xl font-semibold flex items-center gap-2">
-                                    <Database className="h-5 w-5 text-primary" />
-                                    Knowledge Bases
-                                </CardTitle>
-                                <CardDescription>
-                                    Connected data sources for RAG.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {[
-                                    { type: "FILE", label: "Documents & Files", icon: FileText, color: "text-blue-500" },
-                                    { type: "URL", label: "Website Sync", icon: Globe, color: "text-emerald-500" },
-                                    { type: "TEXT", label: "FAQs & Q&A", icon: MessageSquareText, color: "text-orange-500" },
-                                ].map((source) => {
-                                    const items = dataSources.filter(ds => ds.type === source.type);
-                                    const isAdded = items.length > 0;
-
-                                    return (
-                                        <div key={source.type} className="flex items-center justify-between p-4 bg-background border border-border/50 transition-colors hover:border-primary/20 rounded-none">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-none bg-muted ${source.color}`}>
-                                                    <source.icon className="h-5 w-5" />
+                    <TabsContent value="config" className="space-y-8">
+                        <div className="grid gap-8 lg:grid-cols-3">
+                            <div className="lg:col-span-2">
+                                <Card className="rounded-none border shadow-sm bg-muted/40 transition-all border-border/50">
+                                    <CardHeader className="pb-4">
+                                        <CardTitle className="text-2xl font-semibold">Agent Settings</CardTitle>
+                                        <CardDescription>
+                                            Update your agent's identity and behavioral instructions.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <form id="update-bot-form" onSubmit={handleUpdate} className="space-y-6">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
+                                                    <Input
+                                                        id="name"
+                                                        placeholder="e.g. Customer Support"
+                                                        value={name}
+                                                        onChange={(e) => setName(e.target.value)}
+                                                        className="bg-background rounded-none"
+                                                        required
+                                                    />
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-medium leading-none">{source.label}</p>
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        {isAdded ? `${items.length} source(s) connected` : "No data added yet"}
-                                                    </p>
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="persona-template" className="text-sm font-medium">Persona Template</Label>
+                                                    <Select
+                                                        value={selectedTemplate ?? ""}
+                                                        onValueChange={(label) => {
+                                                            const template = PERSONA_TEMPLATES.find(t => t.label === label);
+                                                            if (template) {
+                                                                setSelectedTemplate(template.label);
+                                                                setPersona(template.value);
+                                                            } else {
+                                                                setSelectedTemplate(undefined);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <SelectTrigger id="persona-template" className="rounded-none bg-background">
+                                                            <SelectValue placeholder="Select a template..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="rounded-none">
+                                                            {PERSONA_TEMPLATES.map((t) => (
+                                                                <SelectItem key={t.label} value={t.label}>
+                                                                    {t.label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
                                             </div>
-                                            {isAdded ? (
-                                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                            ) : (
-                                                <Link href={`/dashboard/chatbot/${Id}/data-sources`}>
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8">
-                                                        <Plus className="h-4 w-4" />
-                                                    </Button>
-                                                </Link>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </CardContent>
-                            <CardFooter className="pt-2">
-                                <Link href={`/dashboard/chatbot/${Id}/data-sources`} className="w-full">
-                                    <Button variant="outline" className="w-full rounded-none group">
-                                        Manage Sources
-                                        <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                                    </Button>
-                                </Link>
-                            </CardFooter>
-                        </Card>
-                    </div>
-                </div>
+                                            <div className="grid gap-3">
+                                                <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+                                                <Input
+                                                    id="description"
+                                                    placeholder="A brief description of what this agent does"
+                                                    value={description}
+                                                    onChange={(e) => setDescription(e.target.value)}
+                                                    className="bg-background rounded-none"
+                                                />
+                                            </div>
+                                            <div className="grid gap-3">
+                                                <Label htmlFor="persona" className="text-sm font-medium">Instructions / Persona</Label>
+                                                <Textarea
+                                                    id="persona"
+                                                    placeholder="Describe how the agent should behave, its personality, and expertise..."
+                                                    value={persona}
+                                                    onChange={(e) => setPersona(e.target.value)}
+                                                    className="min-h-[150px] bg-background resize-none rounded-none"
+                                                    required
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Select a template above to auto-fill, or write a fully custom prompt below.
+                                                </p>
+                                            </div>
+                                        </form>
+                                    </CardContent>
+                                    <CardFooter className="pt-2">
+                                        <Button
+                                            type="submit"
+                                            form="update-bot-form"
+                                            disabled={updating}
+                                            className="rounded-none px-8 h-11"
+                                        >
+                                            {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Save Changes
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            </div>
 
+                            <div className="lg:col-span-1 space-y-6">
+                                <Card className="rounded-none border shadow-sm bg-muted/40 h-full border-border/50">
+                                    <CardHeader className="pb-4">
+                                        <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                                            <Database className="h-5 w-5 text-primary" />
+                                            Knowledge Bases
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Connected data sources for RAG.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {[
+                                            { type: "FILE", label: "Documents & Files", icon: FileText, color: "text-blue-500" },
+                                            { type: "URL", label: "Website Sync", icon: Globe, color: "text-emerald-500" },
+                                            { type: "TEXT", label: "FAQs & Q&A", icon: MessageSquareText, color: "text-orange-500" },
+                                        ].map((source) => {
+                                            const items = dataSources.filter(ds => ds.type === source.type);
+                                            const isAdded = items.length > 0;
+
+                                            return (
+                                                <div key={source.type} className="flex items-center justify-between p-4 bg-background border border-border/50 transition-colors hover:border-primary/20 rounded-none">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`p-2 rounded-none bg-muted ${source.color}`}>
+                                                            <source.icon className="h-5 w-5" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-medium leading-none">{source.label}</p>
+                                                            <p className="text-xs text-muted-foreground mt-1">
+                                                                {isAdded ? `${items.length} source(s) connected` : "No data added yet"}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {isAdded ? (
+                                                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                                    ) : (
+                                                        <Link href={`/dashboard/dataSource`}>
+                                                            <Button size="icon" variant="ghost" className="h-8 w-8">
+                                                                <Plus className="h-4 w-4" />
+                                                            </Button>
+                                                        </Link>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </CardContent>
+                                    <CardFooter className="pt-2">
+                                        <Link href={`/dashboard/chatbot/${Id}/data-sources`} className="w-full">
+                                            <Button variant="outline" className="w-full rounded-none group">
+                                                Manage Sources
+                                                <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                                            </Button>
+                                        </Link>
+                                    </CardFooter>
+                                </Card>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="integration" className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <IntegrationTab
+                            bot={bot}
+                            customCss={customCss}
+                            setCustomCss={setCustomCss}
+                            handleUpdate={handleUpdate}
+                            updating={updating}
+                            showApiKey={showApiKey}
+                            setShowApiKey={setShowApiKey}
+                            handleGenerateApiKey={handleGenerateApiKey}
+                            defaultCss={DEFAULT_CSS}
+                        />
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     );

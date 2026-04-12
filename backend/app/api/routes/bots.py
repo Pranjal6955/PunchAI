@@ -7,6 +7,7 @@ from app.core.database import db
 from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, BotWithUserResponse
 from app.api.deps import get_current_user
 from app.core.vector_store import delete_collection
+import uuid
 
 router = APIRouter(prefix="/bots", tags=["Bots"])
 
@@ -103,3 +104,25 @@ async def delete_bot(bot_id: str, current_user=Depends(get_current_user)):
     # 2. Delete from Database (cascades to chats, sources, etc.)
     await db.bot.delete(where={"id": bot_id})
     return None
+
+
+@router.post("/{bot_id}/api-key", response_model=BotResponse)
+async def generate_bot_api_key(bot_id: str, current_user=Depends(get_current_user)):
+    """Generate or rotate an API key for a bot."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # Only owner can generate key
+    if bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this bot")
+
+    if bot.apiKey:
+        raise HTTPException(status_code=400, detail="API Key already generated for this chatbot")
+
+    new_key = str(uuid.uuid4())
+    updated = await db.bot.update(
+        where={"id": bot_id},
+        data={"apiKey": new_key}
+    )
+    return updated

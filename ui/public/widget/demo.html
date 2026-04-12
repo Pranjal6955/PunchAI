@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PunchAI Widget Demo</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border: 1px solid #e5e5e5;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 2.5rem;
+            letter-spacing: -0.05em;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PunchAI Widget Demo</h1>
+        <p>This is a demo page with our embeddable chatbot widget.</p>
+        <code>
+            &lt;script src="http://localhost:3000/widget/punch-chat.js" <br>
+            &nbsp;&nbsp;data-api-key="YOUR_API_KEY"&gt;&lt;/script&gt;
+        </code>
+    </div>
+
+    <!-- Embeddable Widget! -->
+    <script src="/widget/punch-chat.js" 
+            data-api-key="ed8a939c-e5b1-4682-8189-5e39864775bc"
+            data-base-url="http://localhost:8000">
+    </script>
+</body>
+</html>

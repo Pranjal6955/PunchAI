@@ -200,6 +200,8 @@ export interface Bot {
   name: string;
   description?: string;
   botPersona: string;
+  apiKey?: string;
+  customCss?: string;
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -261,6 +263,14 @@ export const deleteBot = async (botId: string): Promise<boolean> => {
     method: "DELETE",
   });
   return res.ok;
+};
+
+export const generateBotApiKey = async (botId: string): Promise<Bot | null> => {
+  const res = await authorizedFetch(`/api/bots/${botId}/api-key`, {
+    method: "POST",
+  });
+  if (!res.ok) return null;
+  return await parseJsonSafely<Bot>(res);
 };
 
 // --- Chat Interfaces & API ---

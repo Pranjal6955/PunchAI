@@ -34,6 +34,8 @@ model Bot {
     name        String
     description String?
     botPersona  String? @map("bot_persona")
+    apiKey      String? @unique @map("api_key")
+    customCss   String? @map("custom_css")
     createdAt   DateTime @default(now()) @map("created_at")
     updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -108,8 +110,8 @@ model Chat {
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
-    userId String @map("user_id")
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId String? @map("user_id")
+    user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
     botId String @map("bot_id")
     bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)

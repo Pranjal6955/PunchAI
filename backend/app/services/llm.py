@@ -34,8 +34,12 @@ def build_rag_prompt(persona: Optional[str], context: List[str], question: str, 
         history_text = "### RECENT CHAT HISTORY\n"
         for msg in history:
             # Handle both object (from Prisma) and dict (if passed manually)
-            role = getattr(msg, 'role', msg.get('role', 'USER'))
-            content = getattr(msg, 'content', msg.get('content', ''))
+            if isinstance(msg, dict):
+                role = msg.get('role', 'USER')
+                content = msg.get('content', '')
+            else:
+                role = getattr(msg, 'role', 'USER')
+                content = getattr(msg, 'content', '')
             history_text += f"{role}: {content}\n"
         history_text += "\n---\n"
 
