@@ -2,7 +2,8 @@
 FastAPI dependencies for authentication.
 """
 
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header, Request
+from typing import Optional
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from app.core.config import settings
@@ -37,11 +38,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 
-async def get_bot_by_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
+async def get_bot_by_api_key(
+    request: Request,
+    x_api_key: str | None = Header(None, alias="X-API-Key")
+):
     """
     Validate the API key and return the bot.
     Used for external widget interactions.
     """
+    # Skip validation for OPTIONS preflight requests
+    if request.method == "OPTIONS":
+        return None
+
     if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
