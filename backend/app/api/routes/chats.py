@@ -96,7 +96,7 @@ async def add_message(
         history=history
     )
     
-    ai_text = generate_llm_response(prompt)
+    ai_text = await generate_llm_response(prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(

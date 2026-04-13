@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_PORT: int = 8000
     APP_HOST: str = "0.0.0.0"
+    DEBUG: bool = False
     SECRET_KEY: str = "change-me"
 
     # ── CORS ──

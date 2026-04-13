@@ -7,6 +7,7 @@ import os
 import shutil
 from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from prisma import Json
 from app.core.database import db
 from app.schemas.datasource import (
@@ -40,7 +41,9 @@ async def upload_pdf(
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{file.filename}")
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{safe_filename}")
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -52,7 +55,7 @@ async def upload_pdf(
     )
 
     # 1. Specialized PDF Extraction & Cleaning (handles page numbers/artifacts)
-    content = extract_text_from_pdf(file_path)
+    content = await run_in_threadpool(extract_text_from_pdf, file_path)
     if content:
         await db.documentchunk.create(
             data={
@@ -61,9 +64,9 @@ async def upload_pdf(
                 "bot": {"connect": {"id": botId}}
             }
         )
-        process_and_store(
+        await process_and_store(
             bot_id=botId, source_id=ds.id, raw_text=content, 
-            metadata={"source_name": file.filename, "type": "PDF"}
+            metadata={"source_name": safe_filename, "type": "PDF"}
         )
         await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
     else:
@@ -87,7 +90,7 @@ async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_use
     )
 
     # 1. Specialized URL Extraction & Cleaning (filters nav/footer/ads)
-    content = extract_text_from_url(str(payload.url))
+    content = await run_in_threadpool(extract_text_from_url, str(payload.url))
     if content:
         await db.documentchunk.create(
             data={
@@ -96,7 +99,7 @@ async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_use
                 "bot": {"connect": {"id": payload.botId}}
             }
         )
-        process_and_store(
+        await process_and_store(
             bot_id=payload.botId, source_id=ds.id, raw_text=content, 
             metadata={"url": str(payload.url), "type": "URL"}
         )
@@ -143,7 +146,7 @@ async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_curre
             }
         )
 
-    process_and_store(
+    await process_and_store(
         bot_id=payload.botId, source_id=ds.id, raw_text=full_faq_text, 
         metadata={"source_name": payload.name, "type": "FAQ"}
     )

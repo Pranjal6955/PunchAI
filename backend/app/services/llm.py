@@ -3,20 +3,20 @@ LLM Service for PunchAI with OpenRouter and Groq fallback.
 Builds the RAG prompt and generates a response based on retrieved context.
 """
 
-import json
 from typing import List, Optional
-from openai import OpenAI
-from groq import Groq
+from openai import AsyncOpenAI
+from groq import AsyncGroq
 from app.core.config import settings
+from app.core.logging import logger
 
-# Initialize OpenAI client for OpenRouter
-openrouter_client = OpenAI(
+# Initialize Async OpenAI client for OpenRouter
+openrouter_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=settings.OPENROUTER_API_KEY,
 )
 
-# Initialize Groq client
-groq_client = Groq(
+# Initialize Async Groq client
+groq_client = AsyncGroq(
     api_key=settings.GROQ_API_KEY,
 )
 
@@ -33,7 +33,6 @@ def build_rag_prompt(persona: Optional[str], context: List[str], question: str, 
     if history:
         history_text = "### RECENT CHAT HISTORY\n"
         for msg in history:
-            # Handle both object (from Prisma) and dict (if passed manually)
             if isinstance(msg, dict):
                 role = msg.get('role', 'USER')
                 content = msg.get('content', '')
@@ -69,10 +68,10 @@ You are replying to a user in a chat conversation. Your goal is to answer the us
     return prompt.strip()
 
 
-def generate_openrouter_response(prompt: str) -> str:
-    """Calls OpenRouter to generate an AI response."""
+async def generate_openrouter_response(prompt: str) -> str:
+    """Calls OpenRouter asynchronously to generate an AI response."""
     try:
-        response = openrouter_client.chat.completions.create(
+        response = await openrouter_client.chat.completions.create(
             model=settings.OPENROUTER_MODEL,
             messages=[{"role": "user", "content": prompt}],
             extra_headers={
@@ -80,35 +79,69 @@ def generate_openrouter_response(prompt: str) -> str:
                 "X-Title": "PunchAI",
             }
         )
-        if response.choices and len(response.choices) > 0:
+        if response.choices:
             return response.choices[0].message.content
         raise Exception("OpenRouter returned no response choices.")
     except Exception as e:
-        print(f"OpenRouter Error: {e}")
+        logger.error(f"OpenRouter Error: {e}")
         raise e
 
 
-def generate_groq_response(prompt: str) -> str:
-    """Calls Groq as a fallback LLM."""
+async def generate_groq_response(prompt: str) -> str:
+    """Calls Groq asynchronously as a fallback LLM."""
     try:
-        response = groq_client.chat.completions.create(
+        response = await groq_client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
         )
-        if response.choices and len(response.choices) > 0:
+        if response.choices:
             return response.choices[0].message.content
         return "Groq returned no response choices."
     except Exception as e:
-        print(f"Groq Error: {e}")
-        return f"I'm sorry, I'm having trouble reaching my AI engines (both OpenRouter and Groq). Error: {str(e)}"
+        logger.error(f"Groq Error: {e}")
+        return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}"
 
 
-def generate_llm_response(prompt: str) -> str:
-    """Main entry point with fallback: OpenRouter -> Groq."""
+async def generate_llm_response(prompt: str) -> str:
+    """Main entry point with async fallback: OpenRouter -> Groq."""
     try:
-        # Try OpenRouter first
-        return generate_openrouter_response(prompt)
+        return await generate_openrouter_response(prompt)
     except Exception:
-        # Fallback to Groq
-        print("Switching to Groq fallback...")
-        return generate_groq_response(prompt)
+        logger.warning("Switching to Groq fallback...")
+        return await generate_groq_response(prompt)
+
+
+async def generate_llm_stream(prompt: str):
+    """
+    Real-time Message Streaming (f):
+    Generates chunks of text as they come from the AI.
+    """
+    try:
+        # Try OpenRouter streaming first
+        stream = await openrouter_client.chat.completions.create(
+            model=settings.OPENROUTER_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True,
+            extra_headers={
+                "HTTP-Referer": "https://punchai.app",
+                "X-Title": "PunchAI",
+            }
+        )
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+                
+    except Exception as e:
+        logger.error(f"Streaming Error (swapping to Groq fallback): {e}")
+        # Fallback to Groq streaming
+        try:
+            stream = await groq_client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
+            )
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e2:
+            yield f"Error: {str(e2)}"

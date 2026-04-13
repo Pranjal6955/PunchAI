@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db
+from app.core.logging import logger
+from app.core.limiter import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 from fastapi.staticfiles import StaticFiles
 import os
 
@@ -30,9 +34,11 @@ from app.api.routes.external import router as external_router
 # ── Lifespan: DB connect / disconnect ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting up PunchAI Backend...")
     await connect_db()
     yield
     await disconnect_db()
+    logger.info("Shutting down PunchAI Backend...")
 
 
 # ── Create app ──
@@ -44,6 +50,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# Add limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS Middleware ──
 # We allow specific origins with credentials for the dashboard, 

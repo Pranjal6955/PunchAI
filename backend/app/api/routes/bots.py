@@ -3,6 +3,7 @@ REST API routes for Bot CRUD operations.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.concurrency import run_in_threadpool
 from app.core.database import db
 from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, BotWithUserResponse
 from app.api.deps import get_current_user
@@ -99,7 +100,7 @@ async def delete_bot(bot_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Not authorized to delete this bot")
 
     # 1. Delete from Vector Store
-    delete_collection(bot_id)
+    await run_in_threadpool(delete_collection, bot_id)
 
     # 2. Delete from Database (cascades to chats, sources, etc.)
     await db.bot.delete(where={"id": bot_id})
