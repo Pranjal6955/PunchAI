@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { getStoredAccessToken, refreshAccessToken } from "@/lib/api-session";
 import React, { useEffect, useState } from "react";
@@ -6,11 +6,7 @@ import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
@@ -40,11 +36,9 @@ export default function DashboardLayout({
   return (
     <SidebarProvider>
       <DashboardSidebar />
-      <SidebarInset className="flex w-full flex-col bg-background">
+      <SidebarInset className="bg-background flex w-full flex-col">
         <DashboardHeader />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

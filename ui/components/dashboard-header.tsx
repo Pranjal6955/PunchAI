@@ -52,7 +52,6 @@ export function DashboardHeader() {
       dashboard: "Dashboard",
       chatbot: "Chatbots",
       dataSource: "Data Sources",
-
     };
 
     segments.forEach((segment, index) => {
@@ -60,7 +59,8 @@ export function DashboardHeader() {
       const isLast = index === segments.length - 1;
 
       // Check if it's likely an ID (comes after chatbot/Project and doesn't match keys)
-      const isId = index > 0 &&
+      const isId =
+        index > 0 &&
         (segments[index - 1] === "chatbot" || segments[index - 1] === "Project") &&
         !labelMap[segment];
 
@@ -83,7 +83,7 @@ export function DashboardHeader() {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 border-b">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1" />
         <Breadcrumb>

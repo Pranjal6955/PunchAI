@@ -1,4 +1,5 @@
-export const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+export const apiBase =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
 export const getAvatarUrl = (path?: string) => {
   if (!path) return undefined;
@@ -23,7 +24,9 @@ export const clearStoredAccessToken = () => {
   localStorage.removeItem("authToken");
 };
 
-export const parseJsonSafely = async <T = Record<string, unknown>>(res: Response): Promise<T | null> => {
+export const parseJsonSafely = async <T = Record<string, unknown>>(
+  res: Response
+): Promise<T | null> => {
   try {
     return (await res.json()) as T;
   } catch {
@@ -102,14 +105,20 @@ export interface User {
   createdAt: string;
 }
 
-export const login = async (credentials: any): Promise<any> => {
+export interface AuthResponse {
+  accessToken: string;
+  user: User;
+  detail?: string;
+}
+
+export const login = async (credentials: Record<string, unknown>): Promise<AuthResponse> => {
   const res = await fetch(buildApiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(credentials),
   });
 
-  const data = await res.json();
+  const data = (await res.json()) as AuthResponse;
   if (!res.ok) {
     throw new Error(data.detail || "Login failed");
   }
@@ -123,14 +132,14 @@ export const login = async (credentials: any): Promise<any> => {
   return data;
 };
 
-export const signup = async (userData: any): Promise<any> => {
+export const signup = async (userData: Record<string, unknown>): Promise<AuthResponse> => {
   const res = await fetch(buildApiUrl("/api/auth/signup"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(userData),
   });
 
-  const data = await res.json();
+  const data = (await res.json()) as AuthResponse;
   if (!res.ok) {
     throw new Error(data.detail || "Registration failed");
   }
@@ -280,7 +289,7 @@ export interface Message {
   role: "USER" | "ASSISTANT";
   content: string;
   createdAt: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Chat {
@@ -327,10 +336,7 @@ export const createChat = async (data: {
   return await parseJsonSafely<Chat>(res);
 };
 
-export const addMessage = async (
-  chatId: string,
-  content: string
-): Promise<Message | null> => {
+export const addMessage = async (chatId: string, content: string): Promise<Message | null> => {
   const res = await authorizedFetch(`/api/chats/${chatId}/messages`, {
     method: "POST",
     headers: {
@@ -378,7 +384,7 @@ export interface FAQ {
 export interface DocumentChunk {
   id: string;
   content: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   sourceId: string;
   botId: string;
   createdAt: string;
@@ -415,7 +421,11 @@ export const addUrlDataSource = async (botId: string, url: string): Promise<Data
   return await parseJsonSafely<DataSource>(res);
 };
 
-export const addFaqDataSource = async (botId: string, name: string, faqs: { question: string, answer: string }[]): Promise<DataSource | null> => {
+export const addFaqDataSource = async (
+  botId: string,
+  name: string,
+  faqs: { question: string; answer: string }[]
+): Promise<DataSource | null> => {
   const res = await authorizedFetch("/api/datasources/faq", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -439,7 +449,10 @@ export const listFaqs = async (botId: string): Promise<FAQ[]> => {
   return data || [];
 };
 
-export const updateFaq = async (faqId: string, data: { question?: string, answer?: string }): Promise<FAQ | null> => {
+export const updateFaq = async (
+  faqId: string,
+  data: { question?: string; answer?: string }
+): Promise<FAQ | null> => {
   const res = await authorizedFetch(`/api/datasources/faqs/${faqId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -463,7 +476,10 @@ export const getSourceChunks = async (dsId: string): Promise<DocumentChunk[]> =>
   return data || [];
 };
 
-export const updateChunk = async (chunkId: string, content: string): Promise<DocumentChunk | null> => {
+export const updateChunk = async (
+  chunkId: string,
+  content: string
+): Promise<DocumentChunk | null> => {
   const res = await authorizedFetch(`/api/datasources/chunks/${chunkId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

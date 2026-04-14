@@ -1,7 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, Bell, BotMessageSquare, ChevronsUpDown, CreditCard, Database, GalleryVerticalEnd, LayoutDashboard, LogOut, Sparkles } from "lucide-react";
+import {
+  BadgeCheck,
+  Bell,
+  BotMessageSquare,
+  ChevronsUpDown,
+  CreditCard,
+  Database,
+  GalleryVerticalEnd,
+  LayoutDashboard,
+  LogOut,
+  Sparkles,
+} from "lucide-react";
 import Image from "next/image";
 import {
   Sidebar,
@@ -61,10 +72,20 @@ export function DashboardSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="hover:bg-transparent">
               <Link href="/dashboard" className="flex items-center">
-                <Image src="/Logo_dark_theme.png" alt="PunchAI Logo" width={32} height={32} className="object-contain shrink-0" />
-                <div className="grid flex-1 text-left text-sm leading-tight ml-3 group-data-[collapsible=icon]:hidden">
-                  <span className="truncate font-bold text-sidebar-foreground tracking-tight">Punch Studio</span>
-                  <span className="truncate text-[10px] text-muted-foreground/70 font-medium uppercase tracking-wider">Chatbot as a Service</span>
+                <Image
+                  src="/Logo_dark_theme.png"
+                  alt="PunchAI Logo"
+                  width={32}
+                  height={32}
+                  className="shrink-0 object-contain"
+                />
+                <div className="ml-3 grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                  <span className="text-sidebar-foreground truncate font-bold tracking-tight">
+                    Punch Studio
+                  </span>
+                  <span className="text-muted-foreground/70 truncate text-[10px] font-medium tracking-wider uppercase">
+                    Chatbot as a Service
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -85,7 +106,11 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/chatbot")} tooltip="Chatbot">
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith("/dashboard/chatbot")}
+                tooltip="Chatbot"
+              >
                 <Link href="/dashboard/chatbot">
                   <BotMessageSquare className="size-4" />
                   <span>Chatbot</span>
@@ -93,7 +118,11 @@ export function DashboardSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith("/dashboard/dataSource")} tooltip="Data Sources">
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith("/dashboard/dataSource")}
+                tooltip="Data Sources"
+              >
                 <Link href="/dashboard/dataSource">
                   <Database className="size-4" />
                   <span>Data Sources</span>
@@ -121,7 +150,9 @@ export function DashboardSidebar() {
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">{user?.name ?? "Loading..."}</span>
-                    <span className="truncate text-xs text-muted-foreground">{user?.email ?? ""}</span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      {user?.email ?? ""}
+                    </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>
@@ -142,7 +173,9 @@ export function DashboardSidebar() {
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">{user?.name ?? "User"}</span>
-                      <span className="truncate text-xs text-muted-foreground">{user?.email ?? ""}</span>
+                      <span className="text-muted-foreground truncate text-xs">
+                        {user?.email ?? ""}
+                      </span>
                     </div>
                   </div>
                 </DropdownMenuLabel>
