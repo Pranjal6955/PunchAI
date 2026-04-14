@@ -37,7 +37,7 @@ class MessageResponse(BaseModel):
 class ChatResponse(BaseModel):
     id: str
     title: Optional[str] = None
-    userId: str
+    userId: Optional[str] = None
     botId: str
     createdAt: datetime
     updatedAt: datetime

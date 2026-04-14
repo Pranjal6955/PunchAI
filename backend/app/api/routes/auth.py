@@ -72,3 +72,14 @@ async def login(payload: UserLogin):
         "tokenType": "bearer",
         "user": user,
     }
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(user: UserResponse = Depends(get_current_user)):
+    """Refresh the access token for the current user."""
+    token = create_access_token(subject=user.id)
+    return {
+        "accessToken": token,
+        "tokenType": "bearer",
+        "user": user,
+    }

@@ -43,6 +43,7 @@ class TokenResponse(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     avatar: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserListResponse(BaseModel):

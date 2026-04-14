@@ -2,9 +2,14 @@
 REST API routes for User CRUD operations.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
+import os
+import shutil
 from app.core.database import db
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
+from app.api.deps import get_current_user
+
+from app.core.security import get_password_hash
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -54,9 +59,39 @@ async def update_user(user_id: str, payload: UserUpdate):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    data = payload.model_dump(exclude_unset=True)
+    if "password" in data:
+        data["password"] = get_password_hash(data["password"])
+
     updated = await db.user.update(
         where={"id": user_id},
-        data=payload.model_dump(exclude_unset=True),
+        data=data,
+    )
+    return updated
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Upload and set profile avatar."""
+    UPLOAD_DIR = "uploads"
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    
+    file_extension = os.path.splitext(file.filename)[1]
+    file_name = f"avatar_{current_user.id}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, file_name)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # URL for the avatar (serving via /uploads mount)
+    avatar_url = f"/uploads/{file_name}"
+    
+    updated = await db.user.update(
+        where={"id": current_user.id},
+        data={"avatar": avatar_url},
     )
     return updated
 

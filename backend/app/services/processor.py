@@ -1,15 +1,14 @@
-"""
-Document Preprocessing Pipeline: Clean -> Chunk -> Embed -> Store.
-Uses SentenceTransformers for local embedding generation.
-"""
-
+import re
+import asyncio
 from typing import List, Dict, Any
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.core.vector_store import get_collection
+from fastapi.concurrency import run_in_threadpool
+from app.core.logging import logger
+from prisma import Json
 
 # Initialize embedding model (free, locally running)
-# 'all-MiniLM-L6-v2' is fast and accurate for general RAG tasks.
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Configure text splitter for chunking
@@ -21,13 +20,29 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 
 def clean_text(text: str) -> str:
-    """Extra cleaning logic for extracted raw text."""
-    # Remove multiple newlines, unnecessary whitespace, etc.
-    cleaned = " ".join(text.split())
-    return cleaned
+    """
+    Validation & Sanitization (i):
+    Improved cleaning logic to handle Noise, HTML, and extra whitespace.
+    """
+    if not text:
+        return ""
+        
+    # Remove HTML tags if any
+    text = re.sub(r'<[^>]+>', '', text)
+    
+    # Normalize horizontal whitespace (tabs/multiple spaces) to single space
+    text = re.sub(r'[ \t]+', ' ', text)
+    
+    # Normalize multiple blank lines to exactly two newlines
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    
+    # Remove control characters
+    text = "".join(ch for ch in text if ord(ch) >= 32 or ch in "\n\r\t")
+    
+    return text.strip()
 
 
-def process_and_store(
+async def process_and_store(
     bot_id: str, 
     source_id: str, 
     raw_text: str, 
@@ -35,15 +50,15 @@ def process_and_store(
 ):
     """
     Main Preprocessing Pipeline:
-    1. Clean text
-    2. Chunk into smaller pieces
-    3. Generate Embeddings (handled by Chroma)
-    4. Store in ChromaDB
+    1. Cleans text.
+    2. Split into small chunks.
+    3. Stores chunks in Postgres (for Keyword Search).
+    4. Generates embeddings and stores in Chroma (for Semantic Search).
     """
     if not raw_text.strip():
         return False
 
-    # 1. Cleaning
+    # 1. Cleaning (Sanitization)
     clean_content = clean_text(raw_text)
     
     # 2. Chunking
@@ -52,8 +67,26 @@ def process_and_store(
     if not chunks:
         return False
 
-    # 3. Embedding & 4. Vector Storage
-    collection = get_collection(bot_id)
+    # 3. SQL Storage (Postgres) - Optimized: Sync small chunks to Postgres in bulk
+    from app.core.database import db
+    try:
+        # Bulk create chunks to minimize DB roundtrips
+        chunk_data = [
+            {
+                "content": chunk,
+                "sourceId": source_id,
+                "botId": bot_id,
+                "metadata": Json(metadata) if metadata else None
+            }
+            for chunk in chunks
+        ]
+        await db.documentchunk.create_many(data=chunk_data)
+    except Exception as e:
+        logger.error(f"Failed to sync chunks to Postgres: {e}")
+        pass
+
+    # 4. Vector Storage (Chroma)
+    collection = await run_in_threadpool(get_collection, bot_id)
     
     # Prepare IDs and Metadatas for Chroma
     ids = [f"{source_id}_{i}" for i in range(len(chunks))]
@@ -63,27 +96,37 @@ def process_and_store(
         meta.update({"source_id": source_id, "bot_id": bot_id, "chunk_index": i})
         metadatas.append(meta)
 
-    # Note: Chroma handles the embedding internally via 'all-MiniLM-L6-v2' 
-    # if we point its 'embedding_function' to it, but for explicit control:
-    embeddings = model.encode(chunks).tolist()
+    # 5. Explicit Embedding Generation (CPU-bound)
+    embeddings = await run_in_threadpool(model.encode, chunks)
+    embeddings_list = embeddings.tolist()
     
-    collection.add(
+    # Store in ChromaDB
+    await run_in_threadpool(
+        collection.add,
         ids=ids,
         documents=chunks,
-        embeddings=embeddings,
+        embeddings=embeddings_list,
         metadatas=metadatas
     )
 
     return True
 
 
-def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str]:
-    """Retrieve relevant chunks using Vector Search (ChromaDB)."""
-    collection = get_collection(bot_id)
-    query_embedding = model.encode(query).tolist()
+async def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str]:
+    """
+    Retrieve relevant chunks using Vector Search.
+    Uses run_in_threadpool for the CPU-bound encoding step.
+    """
+    collection = await run_in_threadpool(get_collection, bot_id)
     
-    results = collection.query(
-        query_embeddings=[query_embedding],
+    # Encode query in threadpool
+    query_embedding = await run_in_threadpool(model.encode, query)
+    query_embedding_list = query_embedding.tolist()
+    
+    # Query Chroma in threadpool
+    results = await run_in_threadpool(
+        collection.query,
+        query_embeddings=[query_embedding_list],
         n_results=top_k,
         include=["documents"]
     )
@@ -92,38 +135,55 @@ def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str]:
 
 
 async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str]:
-    """Retrieve relevant chunks using Keyword Search (PostgreSQL Full-Text)."""
+    """
+    Retrieve relevant chunks using Keyword Search (PostgreSQL Full-Text).
+    Uses standard Postgres FTS (Full-Text Search) for high performance and relevance.
+    """
     from app.core.database import db
     
-    # We use a case-insensitive search across chunks belonging to the bot.
-    # For a production setup, consider using Postgres tsvector/tsquery for better BM25.
-    chunks = await db.documentchunk.find_many(
-        where={
-            "botId": bot_id,
-            "content": {"contains": query, "mode": "insensitive"}
-        },
-        take=top_k
-    )
-    return [c.content for c in chunks]
+    # We use a raw SQL query to leverage Postgres Full-Text Search
+    # websearch_to_tsquery is more user-friendly as it handles quotes/minuses like Google
+    raw_query = """
+        SELECT content
+        FROM document_chunks
+        WHERE bot_id = $1
+        AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $2)
+        LIMIT $3
+    """
+    
+    try:
+        results = await db.query_raw(raw_query, bot_id, query, top_k)
+        return [r['content'] for r in results]
+    except Exception as e:
+        # Fallback to simple contains if FTS fails (e.g. if extensions aren't ready)
+        logger.error(f"FTS Search failed: {e}. Falling back to simple contains.")
+        chunks = await db.documentchunk.find_many(
+            where={
+                "botId": bot_id,
+                "content": {"contains": query, "mode": "insensitive"}
+            },
+            take=top_k
+        )
+        return [c.content for c in chunks]
 
 
 async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5) -> List[str]:
     """
     Combines Semantic Search and Keyword Search (Hybrid Search).
-    Removes duplicates and returns the best top-K chunks.
+    Both retrievers are now appropriately async-friendly.
     """
-    # 1. Semantic (Vector)
-    semantic_results = retrieve_semantic(bot_id, query, top_k=top_k)
+    # Run retrieval in parallel for better performance
+    semantic_task = retrieve_semantic(bot_id, query, top_k=top_k)
+    keyword_task = retrieve_keywords(bot_id, query, top_k=top_k)
     
-    # 2. Keyword (SQL)
-    keyword_results = await retrieve_keywords(bot_id, query, top_k=top_k)
+    semantic_results, keyword_results = await asyncio.gather(semantic_task, keyword_task)
     
-    # 3. Combine and Deduplicate (preserving order of semantic first)
+    # Combine and Deduplicate (preserving order of semantic first)
     combined = []
     seen = set()
     
-    for res in semantic_results + keyword_results:
-        if res not in seen:
+    for res in (semantic_results or []) + (keyword_results or []):
+        if res and res not in seen:
             combined.append(res)
             seen.add(res)
             

@@ -24,6 +24,7 @@ class FAQResponse(BaseModel):
     question: str
     answer: str
     botId: str
+    sourceId: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
 

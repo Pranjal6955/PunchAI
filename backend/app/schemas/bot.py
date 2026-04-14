@@ -21,6 +21,7 @@ class BotUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     botPersona: Optional[str] = None
+    customCss: Optional[str] = None
 
 
 # ── Response Schemas ──
@@ -30,6 +31,8 @@ class BotResponse(BaseModel):
     name: str
     description: Optional[str] = None
     botPersona: Optional[str] = None
+    apiKey: Optional[str] = None
+    customCss: Optional[str] = None
     ownerId: str
     dataSourceCount: Optional[int] = 0
     createdAt: datetime

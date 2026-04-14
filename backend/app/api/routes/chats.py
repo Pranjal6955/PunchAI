@@ -75,13 +75,28 @@ async def add_message(
     await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
 
     # 3. LLM Generation (OpenRouter with Groq Fallback)
+    
+    # Fetch recent chat history (last 5 messages before the current one)
+    history = await db.message.find_many(
+        where={
+            "chatId": chat_id,
+            "NOT": {
+                "id": user_msg.id
+            }
+        },
+        order={"createdAt": "desc"},
+        take=5
+    )
+    history.reverse()  # Chronological order
+
     prompt = build_rag_prompt(
         persona=chat.bot.botPersona, 
         context=context_chunks, 
-        question=payload.content
+        question=payload.content,
+        history=history
     )
     
-    ai_text = generate_llm_response(prompt)
+    ai_text = await generate_llm_response(prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
@@ -101,7 +116,7 @@ async def add_message(
 async def get_chat(chat_id: str, current_user=Depends(get_current_user)):
     chat = await db.chat.find_unique(
         where={"id": chat_id},
-        include={"messages": {"order_by": {"createdAt": "asc"}}}
+        include={"messages": {"order": {"createdAt": "asc"}}}
     )
     if not chat or chat.userId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")

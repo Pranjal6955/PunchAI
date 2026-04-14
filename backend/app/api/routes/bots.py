@@ -3,10 +3,12 @@ REST API routes for Bot CRUD operations.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.concurrency import run_in_threadpool
 from app.core.database import db
 from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, BotWithUserResponse
 from app.api.deps import get_current_user
 from app.core.vector_store import delete_collection
+import uuid
 
 router = APIRouter(prefix="/bots", tags=["Bots"])
 
@@ -53,14 +55,18 @@ async def list_bots(
 
 
 @router.get("/{bot_id}", response_model=BotWithUserResponse)
-async def get_bot(bot_id: str):
-    """Get a single bot by ID with its owner details."""
+async def get_bot(bot_id: str, current_user=Depends(get_current_user)):
+    """Get a single bot by ID with its owner details. (Owner only)"""
     bot = await db.bot.find_unique(
         where={"id": bot_id},
         include={"owner": True, "dataSources": True}
     )
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    
+    # Security check: only owner can see full details
+    if bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
     
     # Manually adding non-persistent field for Response Schema
     bot_dict = bot.model_dump()
@@ -98,8 +104,30 @@ async def delete_bot(bot_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Not authorized to delete this bot")
 
     # 1. Delete from Vector Store
-    delete_collection(bot_id)
+    await run_in_threadpool(delete_collection, bot_id)
 
     # 2. Delete from Database (cascades to chats, sources, etc.)
     await db.bot.delete(where={"id": bot_id})
     return None
+
+
+@router.post("/{bot_id}/api-key", response_model=BotResponse)
+async def generate_bot_api_key(bot_id: str, current_user=Depends(get_current_user)):
+    """Generate or rotate an API key for a bot."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+
+    # Only owner can generate key
+    if bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this bot")
+
+    if bot.apiKey:
+        raise HTTPException(status_code=400, detail="API Key already generated for this chatbot")
+
+    new_key = str(uuid.uuid4())
+    updated = await db.bot.update(
+        where={"id": bot_id},
+        data={"apiKey": new_key}
+    )
+    return updated

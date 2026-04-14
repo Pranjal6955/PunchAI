@@ -7,6 +7,8 @@ import os
 import shutil
 from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from fastapi.concurrency import run_in_threadpool
+from prisma import Json
 from app.core.database import db
 from app.schemas.datasource import (
     DataSourceResponse,
@@ -39,7 +41,9 @@ async def upload_pdf(
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{file.filename}")
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{safe_filename}")
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -51,14 +55,13 @@ async def upload_pdf(
     )
 
     # 1. Specialized PDF Extraction & Cleaning (handles page numbers/artifacts)
-    content = extract_text_from_pdf(file_path)
+    content = await run_in_threadpool(extract_text_from_pdf, file_path)
     if content:
-        await db.documentchunk.create(
-            data={"content": content, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": botId}}}
-        )
-        process_and_store(
+        # process_and_store now handles both splitting into granular chunks 
+        # and saving them to both ChromaDB and Postgres SQL.
+        await process_and_store(
             bot_id=botId, source_id=ds.id, raw_text=content, 
-            metadata={"source_name": file.filename, "type": "PDF"}
+            metadata={"source_name": safe_filename, "type": "PDF"}
         )
         await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
     else:
@@ -82,12 +85,11 @@ async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_use
     )
 
     # 1. Specialized URL Extraction & Cleaning (filters nav/footer/ads)
-    content = extract_text_from_url(str(payload.url))
+    content = await extract_text_from_url(str(payload.url))
     if content:
-        await db.documentchunk.create(
-            data={"content": content, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}}
-        )
-        process_and_store(
+        # process_and_store now handles both splitting into granular chunks 
+        # and saving them to both ChromaDB and Postgres SQL.
+        await process_and_store(
             bot_id=payload.botId, source_id=ds.id, raw_text=content, 
             metadata={"url": str(payload.url), "type": "URL"}
         )
@@ -111,20 +113,22 @@ async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_curre
 
     full_faq_text = ""
     for item in payload.faqs:
-        # 1. Create FAQ record
+        # 1. Create FAQ record for granular management
         faq_record = await db.faq.create(
-            data={"question": item.question, "answer": item.answer, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}}
+            data={
+                "question": item.question,
+                "answer": item.answer,
+                "source": {"connect": {"id": ds.id}},
+                "bot": {"connect": {"id": payload.botId}}
+            }
         )
         
-        # 2. Specialized FAQ Cleaning & Formatting (standardized Q: / A: prefix)
+        # 2. Format FAQ for RAG context
         faq_text = clean_faq_text(item.question, item.answer)
         full_faq_text += faq_text + "\n\n"
 
-        await db.documentchunk.create(
-            data={"content": faq_text, "source": {"connect": {"id": ds.id}}, "bot": {"connect": {"id": payload.botId}}, "metadata": {"faqId": faq_record.id}}
-        )
-
-    process_and_store(
+    # process_and_store will chunk the concatenated FAQs and save them to SQL/Vector stores
+    await process_and_store(
         bot_id=payload.botId, source_id=ds.id, raw_text=full_faq_text, 
         metadata={"source_name": payload.name, "type": "FAQ"}
     )
@@ -170,8 +174,10 @@ async def delete_datasource(ds_id: str, current_user=Depends(get_current_user)):
     if not ds or ds.bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    if ds.type == "FILE" and ds.fileUrl and os.path.exists(ds.fileUrl):
-        os.remove(ds.fileUrl)
+    if ds.type == "FILE" and ds.fileUrl:
+        # Avoid blocking the event loop with OS operations
+        if os.path.exists(ds.fileUrl):
+            await run_in_threadpool(os.remove, ds.fileUrl)
 
     await db.datasource.delete(where={"id": ds_id})
     return None
