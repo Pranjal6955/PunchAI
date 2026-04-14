@@ -62,24 +62,31 @@ async def add_message(
     if not chat or chat.userId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
+    # Bug 4 fix: validate message content server-side
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message content cannot be empty")
+    if len(content) > 2000:
+        raise HTTPException(status_code=422, detail="Message too long (max 2000 characters)")
+
     # 1. Save User Message
     user_msg = await db.message.create(
         data={
             "role": "USER",
-            "content": payload.content,
+            "content": content,
             "chat": {"connect": {"id": chat_id}},
         }
     )
 
     # 2. Hybrid RAG Retrieval (Vector + Keyword)
-    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=payload.content, top_k=5)
-    
+    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=content, top_k=5)
+
     # Optional: Log the retrieved context into the user's message metadata
     await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
 
     # 3. LLM Generation (OpenRouter with Groq Fallback)
-    
-    # Fetch recent chat history (last 5 messages before the current one)
+
+    # Bug 5 fix: fetch last 10 messages for better conversational context (was 5)
     history = await db.message.find_many(
         where={
             "chatId": chat_id,
@@ -88,14 +95,14 @@ async def add_message(
             }
         },
         order={"createdAt": "desc"},
-        take=5
+        take=10
     )
     history.reverse()  # Chronological order
 
     prompt = build_rag_prompt(
-        persona=chat.bot.botPersona, 
-        context=context_chunks, 
-        question=payload.content,
+        persona=chat.bot.botPersona,
+        context=context_chunks,
+        question=content,
         history=history
     )
     

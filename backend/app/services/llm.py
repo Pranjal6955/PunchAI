@@ -21,14 +21,28 @@ groq_client = AsyncGroq(
 )
 
 
-def build_rag_prompt(persona: Optional[str], context: List[str], question: str, history: List[dict] = None) -> str:
-    """Constructs a prompt template for the RAG response with a focus on politeness and simplicity."""
-    
-    context_text = "\n---\n".join(context)
-    
-    # Use the bot's custom persona or a default base prompt
+def build_rag_prompt(
+    persona: Optional[str],
+    context: List[str],
+    question: str,
+    history: Optional[List] = None,  # Bug 7 fix: was `= None` with List[dict] hint which is fine, but clarified
+) -> str:
+    """Constructs a prompt template for the RAG response."""
+
+    # Bug 6 fix: distinguish empty context from populated context
+    if context:
+        context_text = "\n---\n".join(context)
+        context_section = f"### CONTEXT\n{context_text}"
+    else:
+        context_section = (
+            "### CONTEXT\n"
+            "[No relevant documents found in the knowledge base for this question.\n"
+            "Do NOT invent information. Politely tell the user you don't have that "
+            "information and suggest they ask something else or add more data sources.]"
+        )
+
     base_persona = persona if persona else "You are a helpful and professional AI assistant."
-    
+
     history_text = ""
     if history:
         history_text = "### RECENT CHAT HISTORY\n"
@@ -47,16 +61,14 @@ def build_rag_prompt(persona: Optional[str], context: List[str], question: str, 
 {base_persona}
 
 ### TASK
-You are replying to a user in a chat conversation. Your goal is to answer the user's question accurately using the provided context and considering the recent conversation history. Follow these strict guidelines:
-1. **Be Polite & Conversational**: Always maintain a warm, respectful, and helpful tone. Speak like a friendly professional.
-2. **Simple Language**: Explain concepts in simple, layman terms. Avoid complex jargon or technical speak unless absolutely necessary to explain the data.
-3. **Accuracy**: Use the information in the context provided below. Do not use outside knowledge.
-4. **Contextual Awareness**: If the user refers to previous parts of the conversation, use the RECENT CHAT HISTORY to understand their request.
-5. **Uncertainty**: If the information is not present in the context, politely explain that you don't have that specific information in your records and offer to help with something else.
+You are replying to a user in a chat conversation. Answer accurately using the provided context and conversation history. Follow these strict guidelines:
+1. **Be Polite & Conversational**: Always maintain a warm, respectful, and helpful tone.
+2. **Simple Language**: Explain concepts clearly. Avoid jargon unless necessary.
+3. **Accuracy**: Use ONLY the information in the CONTEXT section below. Do not use outside knowledge.
+4. **Contextual Awareness**: Use RECENT CHAT HISTORY to maintain conversational flow.
+5. **Uncertainty**: If the context is empty or doesn't cover the question, say so honestly and offer to help with something else.
 
-{history_text}
-### CONTEXT
-{context_text}
+{history_text}{context_section}
 
 ---
 
