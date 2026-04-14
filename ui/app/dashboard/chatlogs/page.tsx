@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,17 +61,32 @@ const SENTIMENT_CONFIG: Record<
     string,
     { label: string; color: string; bg: string }
 > = {
-    POSITIVE: {
-        label: "Positive",
+    // ── Canonical values ─────────────────────────────────────────────────────
+    Happy: {
+        label: "Happy",
         color: "text-emerald-400",
         bg: "bg-emerald-400/10",
     },
-    NEGATIVE: { label: "Negative", color: "text-red-400", bg: "bg-red-400/10" },
-    NEUTRAL: {
+    Neutral: {
         label: "Neutral",
         color: "text-foreground/60",
         bg: "bg-muted/50",
     },
+    Frustrated: {
+        label: "Frustrated",
+        color: "text-red-400",
+        bg: "bg-red-400/10",
+    },
+    Curious: {
+        label: "Curious",
+        color: "text-blue-400",
+        bg: "bg-blue-400/10",
+    },
+    // ── Legacy aliases (old DB rows stored before this fix) ──────────────────
+    POSITIVE: { label: "Happy", color: "text-emerald-400", bg: "bg-emerald-400/10" },
+    NEGATIVE: { label: "Frustrated", color: "text-red-400", bg: "bg-red-400/10" },
+    NEUTRAL: { label: "Neutral", color: "text-foreground/60", bg: "bg-muted/50" },
+    CURIOUS: { label: "Curious", color: "text-blue-400", bg: "bg-blue-400/10" },
 };
 
 function SentimentBadge({ sentiment }: { sentiment?: string | null }) {
@@ -80,11 +97,11 @@ function SentimentBadge({ sentiment }: { sentiment?: string | null }) {
             </span>
         );
     }
-    const cfg = SENTIMENT_CONFIG[sentiment.toUpperCase()] ?? {
-        label: sentiment,
-        color: "text-muted-foreground",
-        bg: "bg-muted/50",
-    };
+    // Look up exact key first, then try title-cased version as fallback
+    const cfg =
+        SENTIMENT_CONFIG[sentiment] ??
+        SENTIMENT_CONFIG[sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase()] ??
+        { label: sentiment, color: "text-muted-foreground", bg: "bg-muted/50" };
     return (
         <span
             className={cn(
@@ -278,7 +295,37 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                                                         : "bg-muted/60 text-foreground",
                                                 )}
                                             >
-                                                {msg.content}
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={{
+                                                        p: ({ children }) => (
+                                                            <p className="mb-2 last:mb-0">{children}</p>
+                                                        ),
+                                                        strong: ({ children }) => (
+                                                            <strong className="font-semibold">{children}</strong>
+                                                        ),
+                                                        ul: ({ children }) => (
+                                                            <ul className="mb-2 ml-4 list-disc space-y-0.5">{children}</ul>
+                                                        ),
+                                                        ol: ({ children }) => (
+                                                            <ol className="mb-2 ml-4 list-decimal space-y-0.5">{children}</ol>
+                                                        ),
+                                                        li: ({ children }) => (
+                                                            <li className="leading-relaxed">{children}</li>
+                                                        ),
+                                                        code: ({ children }) => (
+                                                            <code className="bg-black/20 rounded px-1 py-0.5 font-mono text-xs">{children}</code>
+                                                        ),
+                                                        pre: ({ children }) => (
+                                                            <pre className="bg-black/20 mb-2 overflow-x-auto rounded p-3 font-mono text-xs">{children}</pre>
+                                                        ),
+                                                        h1: ({ children }) => <h1 className="mb-1 text-base font-bold">{children}</h1>,
+                                                        h2: ({ children }) => <h2 className="mb-1 text-sm font-bold">{children}</h2>,
+                                                        h3: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
+                                                    }}
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
                                             </div>
                                             <span className="text-muted-foreground/40 text-[10px]">
                                                 {formatTime(msg.createdAt)}

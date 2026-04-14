@@ -149,8 +149,12 @@ async def generate_llm_stream(prompt: str):
 
 async def generate_conversation_insights(history: List[dict]) -> dict:
     """
-    Part #1 & #3: Analytics & Sentiment Analysis
+    Analytics & Sentiment Analysis.
     Uses LLM to summarize the conversation and detect sentiment.
+
+    Returns a dict with:
+      - summary: str   — one-sentence conversation summary
+      - sentiment: str — one of Happy | Neutral | Frustrated | Curious
     """
     if not history:
         return {"summary": "No history to summarize.", "sentiment": "Neutral"}
@@ -165,30 +169,93 @@ async def generate_conversation_insights(history: List[dict]) -> dict:
             content = getattr(msg, 'content', '')
         history_text += f"{role}: {content}\n"
 
-    prompt = f"""
-### TASK
-Analyze the conversation history below.
-Provide:
-1. A one-sentence **summary** of the interaction.
-2. The overall user **sentiment** (Must be "Happy", "Neutral", "Frustrated", or "Curious").
+    prompt = f"""### TASK
+Analyze the conversation history below and return a JSON object.
 
-### HISTORY
+You MUST:
+1. Write a one-sentence **summary** that captures the main topic and outcome.
+2. Classify the overall **user sentiment** using EXACTLY one of these values (case-sensitive):
+   - Happy      → user is satisfied, pleased, or grateful
+   - Neutral    → user is informational, balanced, or has no strong emotion
+   - Frustrated → user is upset, annoyed, or dissatisfied
+   - Curious    → user is exploring, asking many questions, or fact-finding
+
+### CONVERSATION HISTORY
 {history_text}
 
 ### RESPONSE FORMAT
-Return ONLY a valid JSON object like this:
-{{
-  "summary": "...",
-  "sentiment": "..."
-}}
+Return ONLY a raw JSON object — no markdown, no code fences, no extra text:
+{{"summary": "...", "sentiment": "Happy|Neutral|Frustrated|Curious"}}
 """
+
+    # Canonical set
+    VALID_SENTIMENTS = {"Happy", "Neutral", "Frustrated", "Curious"}
+
+    # Synonym map — normalises unexpected LLM outputs to our canonical labels
+    SYNONYM_MAP = {
+        "happy": "Happy",
+        "positive": "Happy",
+        "satisfied": "Happy",
+        "grateful": "Happy",
+        "pleased": "Happy",
+        "good": "Happy",
+        "great": "Happy",
+        "frustrated": "Frustrated",
+        "negative": "Frustrated",
+        "upset": "Frustrated",
+        "angry": "Frustrated",
+        "annoyed": "Frustrated",
+        "bad": "Frustrated",
+        "dissatisfied": "Frustrated",
+        "neutral": "Neutral",
+        "informational": "Neutral",
+        "mixed": "Neutral",
+        "balanced": "Neutral",
+        "curious": "Curious",
+        "inquisitive": "Curious",
+        "exploring": "Curious",
+        "interested": "Curious",
+    }
+
     try:
         raw_response = await generate_llm_response(prompt)
+
         import json, re
-        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+
+        # Strip markdown code fences if the LLM wrapped the JSON
+        cleaned = re.sub(r"```(?:json)?\s*", "", raw_response).strip().strip("`")
+
+        # Extract the first JSON object
+        match = re.search(r'\{.*?\}', cleaned, re.DOTALL)
+        if not match:
+            logger.warning(f"No JSON found in insight response: {raw_response[:200]}")
+            return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
+
+        parsed = json.loads(match.group())
+        summary = parsed.get("summary", "").strip() or "Summary unavailable."
+
+        # Normalise sentiment — strip punctuation, then title-case match
+        raw_sentiment = str(parsed.get("sentiment", "")).strip().rstrip(".,;!")
+        raw_lower = raw_sentiment.lower()
+
+        # Check exact match first (e.g. "Happy"), then synonym lookup
+        matched = next((v for v in VALID_SENTIMENTS if v.lower() == raw_lower), None)
+        if matched:
+            sentiment = matched
+        else:
+            sentiment = SYNONYM_MAP.get(raw_lower, "Neutral")
+            if sentiment == "Neutral" and raw_lower not in SYNONYM_MAP:
+                logger.warning(
+                    f"Unknown sentiment '{raw_sentiment}' — defaulting to Neutral"
+                )
+
+        logger.info(f"Sentiment resolved: '{raw_sentiment}' → '{sentiment}'")
+        return {"summary": summary, "sentiment": sentiment}
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error in insight generation: {e} | raw: {raw_response[:300]}")
         return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
     except Exception as e:
         logger.error(f"Insight Generation Error: {e}")
         return {"summary": "Analysis failed.", "sentiment": "Neutral"}
+
