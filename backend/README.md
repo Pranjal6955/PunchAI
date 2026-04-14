@@ -1,39 +1,40 @@
 # PunchAI Backend (RAG Engine)
 
-A high-performance **Retrieval-Augmented Generation (RAG)** backend built with **FastAPI**, **Prisma Client Python**, **ChromaDB**, and **OpenRouter**.
+A high-performance **Hybrid Retrieval-Augmented Generation (RAG)** backend built with **FastAPI**, **Prisma**, **ChromaDB**, and **PostgreSQL FTS**.
 
 ---
 
-## 📁 Updated Project Structure
+## 📁 Project Structure
 
 ```
 backend/
-├── chroma_db/             # Persistent Vector Database
+├── chroma_db/             # Persistent Vector Database (Semantic Search)
 ├── uploads/               # Local PDF storage (for indexing)
 ├── tests/                 # Automated Test Cases (Pytest)
 ├── prisma/
-│   └── schema.prisma      # DB Schema (User, Bot, Faq, DocumentChunk, Chat)
+│   └── schema.prisma      # DB Schema (Shared with Neon PostgreSQL)
 ├── app/
-│   ├── main.py            # FastAPI Entry Point
+│   ├── main.py            # FastAPI Entry Point (Lifespan, Middleware)
 │   ├── core/
 │   │   ├── config.py      # App Settings / Env
-│   │   ├── database.py    # Prisma SQL Client
+│   │   ├── database.py    # Prisma SQL Client (Postgres)
 │   │   ├── security.py    # JWT Auth & Bcrypt Hashing
-│   │   ├── vector_store.py# ChromaDB Client
-│   │   └── deps.py        # Auth Middleware (Depends)
+│   │   ├── vector_store.py# ChromaDB Client & Collection Management
+│   │   ├── limiter.py     # Slowapi Rate Limiting
+│   │   ├── logging.py     # Loguru Structured Logging
+│   │   └── deps.py        # Shared Dependencies (Auth, API Keys)
 │   ├── api/
 │   │   └── routes/
 │   │       ├── auth.py    # Signup / Login
-│   │       ├── bots.py    # Managed AI Bots
+│   │       ├── bots.py    # Managed AI Bots (Internal)
+│   │       ├── external.py# External Widget API (API Key Auth)
 │   │       ├── datasources# PDF / URL / FAQ Ingestion
-│   │       ├── chats.py   # RAG-powered Chat Interface
-│   │       └── health.py  # Service Health Check
+│   │       ├── chats.py   # Dashboard Chat Interface
+│   │       └── ai.py      # Core AI Utilities (Embeddings, LLM Ops)
 │   ├── services/
-│   │   ├── processor.py   # Clean -> Chunk -> Embed -> Store Pipeline
-│   │   └── llm.py         # Cloud LLM (OpenRouter) Interface
-│   ├── utils/
-│   │   └── extractor.py   # Specialized Text Extractors
-│   ├── schemas/           # Pydantic Data Models
+│   │   ├── processor.py   # Hybrid Search (Vector + Keyword) Logic
+│   │   └── llm.py         # Async LLM orchestration (OpenRouter/Groq)
+│   ├── schemas/           # Pydantic Data Models (Request/Response)
 ├── requirements.txt
 ├── .env                   # Configuration
 └── .gitignore
@@ -41,72 +42,42 @@ backend/
 
 ---
 
-## 🚀 The RAG Pipeline
+## 🚀 The Hybrid RAG Pipeline
 
-1.  **Ingest**: PDFs (extracted via PyPDF2), URLs (BeautifulSoup), or FAQs.
-2.  **Clean**: Specialized logic per source (removes website nav/ads, PDF headers, etc.).
-3.  **Store Raw**: Full text is archived in **Neon PostgreSQL** for reference.
-4.  **Index**: Text is chunked (1000 chars) and embedded using **SentenceTransformers** into **ChromaDB**.
-5.  **Query**: On user message, the most relevant context is retrieved from ChromaDB.
-6.  **Generate**: Context + Bot Persona + User Query are sent to **OpenRouter** to produce a grounded response.
+PunchAI uses a **Hybrid Search** strategy to ensure high precision and relevance:
+
+1.  **Ingest**: PDFs, URLs, or manual FAQs are extracted and sanitized.
+2.  **Sync**: Data is stored simultaneously in **PostgreSQL** (for Keyword Search) and **ChromaDB** (for Semantic Search).
+3.  **Retrieve**: When a user queries:
+    - **Vector Search**: Finds conceptually similar content.
+    - **Keyword Search (FTS)**: Finds exact matches/lexical matches using Postgres Full-Text Search.
+4.  **Rank**: Results are merged and deduplicated.
+5.  **Stream**: The LLM (via OpenRouter or Groq fallback) generates a response that is streamed via **SSE (Server-Sent Events)** for a premium user experience.
 
 ---
 
 ## 🛠️ Setup & Running
 
 ### 1. Prerequisites
+- **Python 3.10+** (Recommend 3.11)
+- **Neon PostgreSQL** (Serverless Postgres)
+- **OpenRouter API Key** (Primary LLM)
+- **Groq API Key** (Fallback LLM)
 
-- **Python 3.11+**
-- **Neon PostgreSQL URL** (Get it at [neon.tech](https://neon.tech))
-- **OpenRouter API Key** (Get it at [openrouter.ai](https://openrouter.ai))
-
-### 2. Environment Configuration
-
-Copy `.env.example` to `.env` and fill in:
-```env
-DATABASE_URL="postgresql://neondb_owner:<password>@<host>.neon.tech/neondb?sslmode=require"
-SECRET_KEY="your-secure-random-string"
-OPENROUTER_API_KEY="sk-or-v1-..."
-OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
-```
-
-### 3. Install & Initialize
-
+### 2. Install & Initialize
 ```bash
 cd backend
-
-# Create & activate environment
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Sync database & generate Prisma client
-prisma db push
-prisma generate
+# Push schema to Neon & Generate Client
+npx prisma db push
 ```
 
-### 4. Run Server
-
+### 3. Run Server
 ```bash
-uvicorn app.main:app --reload --port 8000
-```
-Visit **http://localhost:8000/docs** for the Swagger UI.
-
-### 5. Running Tests
-
-The project uses `pytest` for automated integration testing.
-
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test file
-pytest tests/test_auth.py
-
-# Run with output
-pytest -v
+uvicorn app.main:app --reload
 ```
 
 ---
@@ -116,26 +87,15 @@ pytest -v
 | Category | Method | Endpoint | Description |
 | :--- | :--- | :--- | :--- |
 | **Auth** | `POST` | `/api/auth/signup` | Register new user + JWT |
-| | `POST` | `/api/auth/login` | Login + JWT |
 | **Bots** | `POST` | `/api/bots/` | Create minimalist RAG Bot |
-| | `GET` | `/api/bots/{id}` | Get bot with owner info |
-| **Data** | `POST` | `/api/datasources/upload` | Upload PDF (Auto-Index) |
-| | `POST` | `/api/datasources/url` | Scrape Website (Auto-Index) |
-| | `POST` | `/api/datasources/faq` | Batch Upload FAQs (Auto-Index) |
-| | `GET` | `/api/datasources/faqs` | List/Manage individual FAQs |
-| **Chat** | `POST` | `/api/chats/{id}/messages` | RAG query loop (Retreive -> LLM) |
+| **Data** | `POST` | `/api/datasources/upload` | Upload PDF (Hybrid-Index) |
+| **External** | `POST` | `/api/external/chat/init` | Start Widget Session (API Key) |
+| **Chat** | `POST` | `/api/external/chat/{id}/message/stream` | Streamed RAG Response |
 
 ---
 
-## 🔒 Security
-- Every bot and data action requires a valid **JWT Token**.
-- Users can only access/modify bots and data that they own.
-- Passwords are encrypted using **Bcrypt**.
-
----
-
-## 💎 Dependencies
-- **Core**: FastAPI, Uvicorn, Prisma
-- **ML/AI**: ChromaDB, SentenceTransformers (all-MiniLM-L6-v2), LangChain (Text Splitters)
-- **Extraction**: PyPDF2, BeautifulSoup4, Requests
-- **Auth**: Passlib (Bcrypt), Python-Jose (JWT)
+## 🔒 Performance & Security
+- **Asynchronous**: All I/O and CPU-bound AI operations are handled asynchronously.
+- **Rate Limited**: All public-facing chat endpoints are protected by `slowapi`.
+- **Hybrid Search**: Leverages both the power of embeddings and the surgical precision of PostgreSQL FTS.
+- **Structured Logs**: Integrated `loguru` for enterprise-grade observability.
