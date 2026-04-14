@@ -145,3 +145,50 @@ async def generate_llm_stream(prompt: str):
                     yield chunk.choices[0].delta.content
         except Exception as e2:
             yield f"Error: {str(e2)}"
+
+
+async def generate_conversation_insights(history: List[dict]) -> dict:
+    """
+    Part #1 & #3: Analytics & Sentiment Analysis
+    Uses LLM to summarize the conversation and detect sentiment.
+    """
+    if not history:
+        return {"summary": "No history to summarize.", "sentiment": "Neutral"}
+
+    history_text = ""
+    for msg in history:
+        if isinstance(msg, dict):
+            role = msg.get('role', 'USER')
+            content = msg.get('content', '')
+        else:
+            role = getattr(msg, 'role', 'USER')
+            content = getattr(msg, 'content', '')
+        history_text += f"{role}: {content}\n"
+
+    prompt = f"""
+### TASK
+Analyze the conversation history below.
+Provide:
+1. A one-sentence **summary** of the interaction.
+2. The overall user **sentiment** (Must be "Happy", "Neutral", "Frustrated", or "Curious").
+
+### HISTORY
+{history_text}
+
+### RESPONSE FORMAT
+Return ONLY a valid JSON object like this:
+{{
+  "summary": "...",
+  "sentiment": "..."
+}}
+"""
+    try:
+        raw_response = await generate_llm_response(prompt)
+        import json, re
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
+    except Exception as e:
+        logger.error(f"Insight Generation Error: {e}")
+        return {"summary": "Analysis failed.", "sentiment": "Neutral"}

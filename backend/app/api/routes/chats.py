@@ -3,7 +3,7 @@ REST API routes for Chat and Message operations with full RAG (Retrieval-Augment
 Integrates local ChromaDB and local Ollama (Llama 3).
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from app.core.database import db
 from app.schemas.chat import (
     ChatCreate,
@@ -16,6 +16,7 @@ from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_llm_response
+from app.services.analytics import update_chat_insights
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -35,6 +36,7 @@ async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user
             "title": payload.title or f"Chat with {bot.name}",
             "user": {"connect": {"id": payload.userId}},
             "bot": {"connect": {"id": payload.botId}},
+            "isExternal": False,
         },
         include={"messages": True}
     )
@@ -47,6 +49,7 @@ async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user
 async def add_message(
     chat_id: str, 
     payload: MessageCreate, 
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user)
 ):
     """
@@ -108,6 +111,9 @@ async def add_message(
         }
     )
 
+    # Part #1 & #3: Trigger AI Summary/Sentiment in Background
+    background_tasks.add_task(update_chat_insights, chat_id)
+
     # Return the assistant's message as the reply
     return assistant_msg
 
@@ -116,10 +122,22 @@ async def add_message(
 async def get_chat(chat_id: str, current_user=Depends(get_current_user)):
     chat = await db.chat.find_unique(
         where={"id": chat_id},
-        include={"messages": {"order": {"createdAt": "asc"}}}
+        include={
+            "messages": True,
+            "bot": True
+        }
     )
-    if not chat or chat.userId != current_user.id:
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Sort messages in Python
+    if chat.messages:
+        chat.messages.sort(key=lambda x: x.createdAt)
+        
+    # Allow if requester is the chat creator OR the bot owner
+    if chat.userId != current_user.id and chat.bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
+        
     return chat
 
 
@@ -129,6 +147,29 @@ async def list_chats(userId: str = Query(...), current_user=Depends(get_current_
         raise HTTPException(status_code=403, detail="Forbidden")
 
     chats = await db.chat.find_many(where={"userId": userId}, order={"updatedAt": "desc"})
+    return {"data": chats, "total": len(chats)}
+
+
+@router.get("/owner/all", response_model=ChatListResponse)
+async def list_all_owner_chats(
+    isExternal: bool | None = Query(default=None, description="Filter by chat type: true=external, false=internal, omit=all"),
+    current_user=Depends(get_current_user)
+):
+    """List all conversations for all bots owned by the current user."""
+    # 1. Get all bot IDs owned by the user
+    bots = await db.bot.find_many(where={"ownerId": current_user.id})
+    bot_ids = [b.id for b in bots]
+    
+    # 2. Build filter — optionally scope to internal or external chats
+    where_clause: dict = {"botId": {"in": bot_ids}}
+    if isExternal is not None:
+        where_clause["isExternal"] = isExternal
+
+    # 3. Get all chats for these bots
+    chats = await db.chat.find_many(
+        where=where_clause,
+        order={"updatedAt": "desc"}
+    )
     return {"data": chats, "total": len(chats)}
 
 

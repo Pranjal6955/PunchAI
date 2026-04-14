@@ -11,8 +11,20 @@ from datetime import datetime
 
 class ChatCreate(BaseModel):
     title: Optional[str] = None
-    userId: str
+    userId: Optional[str] = None
     botId: str
+    isExternal: bool = False
+    visitorId: Optional[str] = None
+    externalUserId: Optional[str] = None
+    externalUserName: Optional[str] = None
+    externalUserEmail: Optional[str] = None
+    customMetadata: Optional[dict[str, Any]] = None
+
+class ExternalUserData(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class MessageCreate(BaseModel):
@@ -39,6 +51,14 @@ class ChatResponse(BaseModel):
     title: Optional[str] = None
     userId: Optional[str] = None
     botId: str
+    isExternal: bool
+    visitorId: Optional[str] = None
+    externalUserId: Optional[str] = None
+    externalUserName: Optional[str] = None
+    externalUserEmail: Optional[str] = None
+    summary: Optional[str] = None
+    sentiment: Optional[str] = None
+    customMetadata: Optional[Any] = None
     createdAt: datetime
     updatedAt: datetime
 

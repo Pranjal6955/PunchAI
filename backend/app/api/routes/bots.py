@@ -4,8 +4,10 @@ REST API routes for Bot CRUD operations.
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.concurrency import run_in_threadpool
+from typing import Optional
 from app.core.database import db
 from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, BotWithUserResponse
+from app.schemas.chat import ChatListResponse
 from app.api.deps import get_current_user
 from app.core.vector_store import delete_collection
 import uuid
@@ -131,3 +133,28 @@ async def generate_bot_api_key(bot_id: str, current_user=Depends(get_current_use
         data={"apiKey": new_key}
     )
     return updated
+
+
+@router.get("/{bot_id}/conversations", response_model=ChatListResponse)
+async def get_bot_conversations(
+    bot_id: str,
+    isExternal: Optional[bool] = Query(None),
+    current_user=Depends(get_current_user)
+):
+    """List all conversations for a specific bot. Only accessible by the bot owner."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found")
+    
+    if bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    where = {"botId": bot_id}
+    if isExternal is not None:
+        where["isExternal"] = isExternal
+        
+    chats = await db.chat.find_many(
+        where=where,
+        order={"updatedAt": "desc"}
+    )
+    return {"data": chats, "total": len(chats)}

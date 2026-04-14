@@ -83,9 +83,6 @@ export function DashboardSidebar() {
                   <span className="text-sidebar-foreground truncate font-bold tracking-tight">
                     Punch Studio
                   </span>
-                  <span className="text-muted-foreground/70 truncate text-[10px] font-medium tracking-wider uppercase">
-                    Chatbot as a Service
-                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -126,6 +123,18 @@ export function DashboardSidebar() {
                 <Link href="/dashboard/dataSource">
                   <Database className="size-4" />
                   <span>Data Sources</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith("/dashboard/chatlogs")}
+                tooltip="Chat Logs"
+              >
+                <Link href="/dashboard/chatlogs">
+                  <GalleryVerticalEnd className="size-4" />
+                  <span>Chat Logs</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

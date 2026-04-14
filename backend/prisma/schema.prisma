@@ -118,6 +118,21 @@ model Chat {
 
     messages Message[]
 
+    // Tracks if this conversation is via the external widget
+    isExternal Boolean @default(false) @map("is_external")
+    // Tracks unique anonymous users/sessions
+    visitorId  String? @map("visitor_id")
+
+    // --- NEW: External User Tracking (for users of the Admin's website) ---
+    externalUserId    String? @map("external_user_id")
+    externalUserName  String? @map("external_user_name")
+    externalUserEmail String? @map("external_user_email")
+
+    // --- NEW: AI Insights & Analytics ---
+    summary        String? @db.Text
+    sentiment      String? // e.g., "Happy", "Neutral", "Frustrated"
+    customMetadata Json?   @map("custom_metadata")
+
     @@map("chats")
 }
 
