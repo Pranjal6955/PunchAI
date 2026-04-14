@@ -6,6 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.core.vector_store import get_collection
 from fastapi.concurrency import run_in_threadpool
 from app.core.logging import logger
+from prisma import Json
 
 # Initialize embedding model (free, locally running)
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -49,7 +50,10 @@ async def process_and_store(
 ):
     """
     Main Preprocessing Pipeline:
-    Uses run_in_threadpool for CPU-bound embedding generation.
+    1. Cleans text.
+    2. Split into small chunks.
+    3. Stores chunks in Postgres (for Keyword Search).
+    4. Generates embeddings and stores in Chroma (for Semantic Search).
     """
     if not raw_text.strip():
         return False
@@ -63,7 +67,25 @@ async def process_and_store(
     if not chunks:
         return False
 
-    # 3. Vector Storage
+    # 3. SQL Storage (Postgres) - Optimized: Sync small chunks to Postgres in bulk
+    from app.core.database import db
+    try:
+        # Bulk create chunks to minimize DB roundtrips
+        chunk_data = [
+            {
+                "content": chunk,
+                "sourceId": source_id,
+                "botId": bot_id,
+                "metadata": Json(metadata) if metadata else None
+            }
+            for chunk in chunks
+        ]
+        await db.documentchunk.create_many(data=chunk_data)
+    except Exception as e:
+        logger.error(f"Failed to sync chunks to Postgres: {e}")
+        pass
+
+    # 4. Vector Storage (Chroma)
     collection = await run_in_threadpool(get_collection, bot_id)
     
     # Prepare IDs and Metadatas for Chroma
@@ -74,8 +96,7 @@ async def process_and_store(
         meta.update({"source_id": source_id, "bot_id": bot_id, "chunk_index": i})
         metadatas.append(meta)
 
-    # 4. Explicit Embedding Generation (CPU-bound)
-    # We run this in a threadpool to avoid blocking the event loop
+    # 5. Explicit Embedding Generation (CPU-bound)
     embeddings = await run_in_threadpool(model.encode, chunks)
     embeddings_list = embeddings.tolist()
     
@@ -161,8 +182,8 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5) -> List[str]:
     combined = []
     seen = set()
     
-    for res in semantic_results + keyword_results:
-        if res not in seen:
+    for res in (semantic_results or []) + (keyword_results or []):
+        if res and res not in seen:
             combined.append(res)
             seen.add(res)
             

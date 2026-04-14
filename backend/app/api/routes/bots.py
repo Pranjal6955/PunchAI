@@ -55,14 +55,18 @@ async def list_bots(
 
 
 @router.get("/{bot_id}", response_model=BotWithUserResponse)
-async def get_bot(bot_id: str):
-    """Get a single bot by ID with its owner details."""
+async def get_bot(bot_id: str, current_user=Depends(get_current_user)):
+    """Get a single bot by ID with its owner details. (Owner only)"""
     bot = await db.bot.find_unique(
         where={"id": bot_id},
         include={"owner": True, "dataSources": True}
     )
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
+    
+    # Security check: only owner can see full details
+    if bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
     
     # Manually adding non-persistent field for Response Schema
     bot_dict = bot.model_dump()

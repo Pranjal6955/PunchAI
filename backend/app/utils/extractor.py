@@ -3,7 +3,7 @@ Utilities for extracting and cleaning text from different data sources (PDF, URL
 Includes specialized cleaning logic for each source type.
 """
 
-import requests
+import httpx
 import re
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
@@ -69,12 +69,13 @@ def extract_text_from_pdf(file_path: str) -> str:
         return ""
 
 
-def extract_text_from_url(url: str) -> str:
-    """Scrape, extract, and specifically clean main content from a URL."""
+async def extract_text_from_url(url: str) -> str:
+    """Scrape, extract, and specifically clean main content from a URL asynchronously."""
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+        async with httpx.AsyncClient(headers=headers, timeout=10) as client:
+            response = await client.get(url)
+            response.raise_for_status()
         
         soup = BeautifulSoup(response.text, "html.parser")
         return clean_url_text(soup)
