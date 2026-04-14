@@ -25,67 +25,125 @@ def build_rag_prompt(
     persona: Optional[str],
     context: List[str],
     question: str,
-    history: Optional[List] = None,  # Bug 7 fix: was `= None` with List[dict] hint which is fine, but clarified
-) -> str:
-    """Constructs a prompt template for the RAG response."""
+    history: Optional[List] = None,
+) -> dict:
+    """
+    Constructs a structured prompt (System + User) for the RAG response.
+    Optimized for instruction adherence and context utilization.
+    """
 
-    # Bug 6 fix: distinguish empty context from populated context
+    # 1. Format Context with numbering for better LLM grounding
     if context:
-        context_text = "\n---\n".join(context)
-        context_section = f"### CONTEXT\n{context_text}"
+        context_parts = []
+        for i, chunk in enumerate(context, 1):
+            context_parts.append(f"[Document Chunk {i}]\n{chunk}")
+        context_text = "\n\n".join(context_parts)
+        context_section = f"### RELEVANT KNOWLEDGE\n{context_text}"
     else:
         context_section = (
-            "### CONTEXT\n"
-            "[No relevant documents found in the knowledge base for this question.\n"
-            "Do NOT invent information. Politely tell the user you don't have that "
-            "information and suggest they ask something else or add more data sources.]"
+            "### RELEVANT KNOWLEDGE\n"
+            "[No internal documents found. Answer using general knowledge but notify the user.]"
         )
 
-    base_persona = persona if persona else "You are a helpful and professional AI assistant."
-
+    # 2. Build Chat History Summary (last 10 messages)
     history_text = ""
     if history:
-        history_text = "### RECENT CHAT HISTORY\n"
+        history_text = "### RECENT CONVERSATION\n"
         for msg in history:
-            if isinstance(msg, dict):
-                role = msg.get('role', 'USER')
-                content = msg.get('content', '')
-            else:
-                role = getattr(msg, 'role', 'USER')
-                content = getattr(msg, 'content', '')
+            role = "User" if (msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', 'USER')) == "USER" else "Assistant"
+            content = msg.get('content', '') if isinstance(msg, dict) else getattr(msg, 'content', '')
             history_text += f"{role}: {content}\n"
-        history_text += "\n---\n"
+        history_text += "\n"
 
-    prompt = f"""
-### PERSONA
-{base_persona}
+    # 3. System Prompt (The Brain/Rules)
+    base_persona = persona if persona else "You are a helpful and professional AI assistant."
+    system_prompt = f"""{base_persona}
 
-### TASK
-You are replying to a user in a chat conversation. Answer accurately using the provided context and conversation history. Follow these strict guidelines:
-1. **Be Polite & Conversational**: Always maintain a warm, respectful, and helpful tone.
-2. **Simple Language**: Explain concepts clearly. Avoid jargon unless necessary.
-3. **Accuracy**: Use ONLY the information in the CONTEXT section below. Do not use outside knowledge.
-4. **Contextual Awareness**: Use RECENT CHAT HISTORY to maintain conversational flow.
-5. **Uncertainty**: If the context is empty or doesn't cover the question, say so honestly and offer to help with something else.
+CORE INSTRUCTIONS:
+1. **Source Grounding**: Answer using ONLY the provided 'RELEVANT KNOWLEDGE'. If information is missing, admit it politely.
+2. **Markdown Priority**: Use bold text, bullet points, and clean spacing to make your answer readable.
+3. **Tone**: Be professional, warm, and concise. Avoid yapping or repetitive filler phrases.
+4. **Context Loop**: Use the 'RECENT CONVERSATION' to understand pronouns (it, they, that) or follow-up requests.
+5. **No Hallucinations**: Do NOT invent features, dates, or facts not present in the context.
+"""
 
-{history_text}{context_section}
+    # 4. User Prompt (The specific task)
+    user_prompt = f"""{history_text}{context_section}
 
 ---
 
-### USER QUESTION
-{question}
+USER QUESTION: {question}
 
-### FINAL ANSWER (Simple & Polite)
+FINAL ANSWER:"""
+
+    return {
+        "system": system_prompt.strip(),
+        "user": user_prompt.strip()
+    }
+
+
+async def get_search_query(question: str, history: List[dict] = None) -> str:
+    """
+    Search Prompt Engineering:
+    Strips conversational noise to generate a standalone keyword/semantic search query.
+    Example: "Thanks for that! So what is the pricing?" -> "Pricing"
+    """
+    if not history or len(question.split()) < 4:
+        return question
+
+    history_snippet = ""
+    for msg in history[-3:]:
+        role = "User" if (msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', 'USER')) == "USER" else "Assistant"
+        content = msg.get('content', '') if isinstance(msg, dict) else getattr(msg, 'content', '')
+        history_snippet += f"{role}: {content}\n"
+
+    query_refiner_prompt = f"""### TASK
+Analyze the conversation and the user's latest message. Generate a single, concise search query for a knowledge base.
+
+Guidelines:
+- Strip "thanks", "hello", or conversational filler.
+- If it's a follow-up, resolve pronouns (e.g., "How do I fix it?" -> "How to fix [Topic]").
+- Return ONLY the search terms. Do NOT explain your reasoning.
+
+### CONVERSATION
+{history_snippet}
+User: {question}
+
+### SEARCH QUERY
 """
-    return prompt.strip()
-
-
-async def generate_openrouter_response(prompt: str) -> str:
-    """Calls OpenRouter asynchronously to generate an AI response."""
     try:
+        import re
+        refined = await generate_llm_response(query_refiner_prompt)
+        
+        # Take the most likely line and strip prefixes
+        lines = [l.strip() for l in refined.split('\n') if l.strip()]
+        if not lines:
+            return question
+            
+        final_query = lines[-1].strip().strip('"').strip("'")
+        final_query = re.sub(r'^(Query|Search Query|Standalone Query):\s*', '', final_query, flags=re.IGNORECASE)
+        
+        return final_query if final_query else question
+    except Exception:
+        return question
+
+
+
+async def generate_openrouter_response(prompt: str | dict) -> str:
+    """Calls OpenRouter asynchronously. Supports both raw strings and System/User dicts."""
+    try:
+        messages = []
+        if isinstance(prompt, dict):
+            messages = [
+                {"role": "system", "content": prompt["system"]},
+                {"role": "user", "content": prompt["user"]},
+            ]
+        else:
+            messages = [{"role": "user", "content": prompt}]
+
         response = await openrouter_client.chat.completions.create(
             model=settings.OPENROUTER_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             extra_headers={
                 "HTTP-Referer": "https://punchai.app",
                 "X-Title": "PunchAI",
@@ -99,12 +157,21 @@ async def generate_openrouter_response(prompt: str) -> str:
         raise e
 
 
-async def generate_groq_response(prompt: str) -> str:
-    """Calls Groq asynchronously as a fallback LLM."""
+async def generate_groq_response(prompt: str | dict) -> str:
+    """Calls Groq asynchronously as a fallback. Supports System/User dicts."""
     try:
+        messages = []
+        if isinstance(prompt, dict):
+            messages = [
+                {"role": "system", "content": prompt["system"]},
+                {"role": "user", "content": prompt["user"]},
+            ]
+        else:
+            messages = [{"role": "user", "content": prompt}]
+
         response = await groq_client.chat.completions.create(
             model=settings.GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
         )
         if response.choices:
             return response.choices[0].message.content
@@ -123,16 +190,25 @@ async def generate_llm_response(prompt: str) -> str:
         return await generate_groq_response(prompt)
 
 
-async def generate_llm_stream(prompt: str):
+async def generate_llm_stream(prompt: str | dict):
     """
     Real-time Message Streaming (f):
     Generates chunks of text as they come from the AI.
     """
+    messages = []
+    if isinstance(prompt, dict):
+        messages = [
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"]},
+        ]
+    else:
+        messages = [{"role": "user", "content": prompt}]
+
     try:
         # Try OpenRouter streaming first
         stream = await openrouter_client.chat.completions.create(
             model=settings.OPENROUTER_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             stream=True,
             extra_headers={
                 "HTTP-Referer": "https://punchai.app",
@@ -149,7 +225,7 @@ async def generate_llm_stream(prompt: str):
         try:
             stream = await groq_client.chat.completions.create(
                 model=settings.GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 stream=True,
             )
             async for chunk in stream:

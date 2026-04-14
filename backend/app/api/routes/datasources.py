@@ -22,6 +22,7 @@ from app.schemas.datasource import (
 )
 from app.api.deps import get_current_user
 from app.utils.extractor import extract_text_from_pdf, extract_text_from_url, clean_faq_text, format_faqs_to_text
+from app.core.logging import logger
 from app.services.processor import process_and_store
 
 router = APIRouter(prefix="/datasources", tags=["Data Sources"])
@@ -179,6 +180,16 @@ async def delete_datasource(ds_id: str, current_user=Depends(get_current_user)):
         if os.path.exists(ds.fileUrl):
             await run_in_threadpool(os.remove, ds.fileUrl)
 
+    # Bug Fix: Delete all vectors for this source from Chroma
+    from app.services.processor import get_collection
+    collection = await run_in_threadpool(get_collection, ds.botId)
+    # Chroma delete supports a 'where' clause on metadata
+    await run_in_threadpool(
+        collection.delete,
+        where={"source_id": ds_id}
+    )
+    logger.info(f"Source {ds_id} purged from Chroma")
+
     await db.datasource.delete(where={"id": ds_id})
     return None
 
@@ -201,10 +212,19 @@ async def update_chunk(chunk_id: str, payload: ChunkUpdate, current_user=Depends
     # update in DB
     updated = await db.documentchunk.update(where={"id": chunk_id}, data={"content": payload.content})
     
-    # Ideally, we should re-sync with Chroma here. 
-    # For now, we'll just update the SQL record which is used for keyword search.
-    # To re-sync Chroma properly, we'd need to re-index the whole source since one chunk update 
-    # affects the text splitter's output for the whole raw text.
+    # Bug Fix: Sync with Chroma! 
+    # Extract chunk_index from metadata to target the correct vector ID
+    from app.services.processor import update_single_chunk_vector
+    metadata = chunk.metadata if isinstance(chunk.metadata, dict) else {}
+    chunk_index = metadata.get("chunk_index", 0)
+    
+    await update_single_chunk_vector(
+        bot_id=chunk.botId, 
+        source_id=chunk.sourceId, 
+        chunk_id=chunk_id, 
+        content=payload.content,
+        index=chunk_index
+    )
     
     return updated
 
@@ -214,6 +234,17 @@ async def delete_chunk(chunk_id: str, current_user=Depends(get_current_user)):
     chunk = await db.documentchunk.find_unique(where={"id": chunk_id}, include={"bot": True})
     if not chunk or chunk.bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
+
+    # Bug Fix: Sync with Chroma BEFORE deleting from DB
+    from app.services.processor import delete_single_chunk_vector
+    metadata = chunk.metadata if isinstance(chunk.metadata, dict) else {}
+    chunk_index = metadata.get("chunk_index", 0)
+
+    await delete_single_chunk_vector(
+        bot_id=chunk.botId,
+        source_id=chunk.sourceId,
+        index=chunk_index
+    )
 
     await db.documentchunk.delete(where={"id": chunk_id})
     return None

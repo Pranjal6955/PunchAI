@@ -79,10 +79,24 @@ async def add_message(
     )
 
     # 2. Hybrid RAG Retrieval (Vector + Keyword)
-    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=content, top_k=5)
+    # Improvement: Refine search query to strip conversational noise (Bug fix for RAG effectiveness)
+    from app.services.llm import get_search_query
+    
+    # Fetch top history items for query refinement
+    refinement_history = await db.message.find_many(
+        where={"chatId": chat_id, "NOT": {"id": user_msg.id}},
+        order={"createdAt": "desc"},
+        take=3
+    )
+    search_query = await get_search_query(content, refinement_history)
+    
+    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=search_query, top_k=5)
 
-    # Optional: Log the retrieved context into the user's message metadata
-    await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
+    # Optional: Log the retrieved context/refined query into metadata
+    await db.message.update(
+        where={"id": user_msg.id}, 
+        data={"metadata": Json({"chunks": context_chunks, "refined_query": search_query})}
+    )
 
     # 3. LLM Generation (OpenRouter with Groq Fallback)
 
@@ -99,14 +113,15 @@ async def add_message(
     )
     history.reverse()  # Chronological order
 
-    prompt = build_rag_prompt(
+    # Structured prompt returns a dict {system, user}
+    structured_prompt = build_rag_prompt(
         persona=chat.bot.botPersona,
         context=context_chunks,
         question=content,
         history=history
     )
     
-    ai_text = await generate_llm_response(prompt)
+    ai_text = await generate_llm_response(structured_prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
