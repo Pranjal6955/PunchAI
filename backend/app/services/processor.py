@@ -1,7 +1,7 @@
 import re
 import asyncio
 from typing import List, Dict, Any
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.core.vector_store import get_collection
 from fastapi.concurrency import run_in_threadpool
@@ -10,6 +10,8 @@ from prisma import Json
 
 # Initialize embedding model (free, locally running)
 model = SentenceTransformer('all-MiniLM-L6-v2')
+# Initialize re-ranker model (Small but powerful cross-encoder)
+reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 # Configure text splitter for chunking
 # Reduced chunk_size to 800 to safely fit within the 256-token limit of MiniLM
@@ -195,80 +197,69 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
     if not query or len(query.strip()) < 2:
         return []
         
-    from app.core.database import db
-    
-    # We use a raw SQL query to leverage Postgres Full-Text Search
-    # websearch_to_tsquery is more user-friendly as it handles quotes/minuses like Google
-    raw_query = """
-        SELECT content
-        FROM document_chunks
-        WHERE bot_id = $1
-        AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $2)
-        LIMIT $3
-    """
-    
-    try:
+    async def _fetch():
+        from app.core.database import db
+        raw_query = """
+            SELECT content
+            FROM document_chunks
+            WHERE bot_id = $1
+            AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $2)
+            LIMIT $3
+        """
         results = await db.query_raw(raw_query, bot_id, query, top_k)
         return [r['content'] for r in results]
-    except Exception as e:
-        # Improved Fallback: Split query into words and search for chunks containing any of them
-        # (This is better than exact substring matching)
-        logger.error(f"FTS Search failed: {e}. Falling back to words-based search.")
-        search_terms = [t for t in query.split() if len(t) > 2]
-        if not search_terms:
-            search_terms = [query]
 
-        # We construct an OR query for the words
-        or_conditions = [{"content": {"contains": term, "mode": "insensitive"}} for term in search_terms]
-        
-        chunks = await db.documentchunk.find_many(
-            where={
-                "botId": bot_id,
-                "OR": or_conditions
-            },
-            take=top_k
-        )
-        return [c.content for c in chunks]
+    try:
+        # P0 Enhancement: 1.5s timeout to prevent the 8s stalling observed in benchmarks
+        return await asyncio.wait_for(_fetch(), timeout=1.5)
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"Keyword search (FTS) bypassed or failed: {type(e).__name__}")
+        return []
 
 
 async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5) -> List[str]:
     """
-    Combines Semantic Search and Keyword Search (Hybrid Search).
-    Improved: Interweaves results to ensure both semantic and keyword 
-    high-confidence matches are represented in the final context.
+    Combines Semantic Search and Keyword Search (Hybrid Search) with Re-ranking.
+    1. Retrieves candidates using Semantic (Chroma) and Keyword (Postgres).
+    2. Interleaves top candidates.
+    3. Re-ranks candidates using a Cross-Encoder for maximum accuracy.
     """
-    # 1. Run retrieval in parallel
-    semantic_task = retrieve_semantic(bot_id, query, top_k=top_k)
-    keyword_task = retrieve_keywords(bot_id, query, top_k=top_k)
+    # 1. Run retrieval in parallel (Top-K*2 to have enough candidates for re-ranking)
+    candidate_k = top_k * 2
+    semantic_task = retrieve_semantic(bot_id, query, top_k=candidate_k)
+    keyword_task = retrieve_keywords(bot_id, query, top_k=candidate_k)
     
     semantic_results, keyword_results = await asyncio.gather(semantic_task, keyword_task)
     
-    # 2. Balanced Interweaving (Co-operative Ranking)
-    combined = []
+    # 2. Balanced Interweaving to get a candidate pool
+    candidates = []
     seen = set()
     
-    # We take from both lists iteratively until we hit top_k
-    # This prevents semantic results from completely drowning out keyword-specific exact matches
-    for i in range(top_k):
-        # Add semantic at index i
+    for i in range(candidate_k):
         if i < len(semantic_results):
             chunk = semantic_results[i]
             if chunk not in seen:
-                combined.append(chunk)
+                candidates.append(chunk)
                 seen.add(chunk)
         
-        # Stop early if full
-        if len(combined) >= top_k:
-            break
-            
-        # Add keyword at index i
         if i < len(keyword_results):
             chunk = keyword_results[i]
             if chunk not in seen:
-                combined.append(chunk)
+                candidates.append(chunk)
                 seen.add(chunk)
-                
-        if len(combined) >= top_k:
-            break
-            
-    return combined[:top_k]
+    
+    if not candidates:
+        return []
+
+    # 3. P1 Enhancement: Cross-Encoder Re-ranking
+    # We score each (query, candidate) pair
+    pairs = [[query, cand] for cand in candidates]
+    
+    # Run scoring in threadpool (CPU bound)
+    scores = await run_in_threadpool(reranker.predict, pairs)
+    
+    # Combine and sort by score (descending)
+    scored_candidates = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
+    
+    # Return top_k
+    return [c for c, s in scored_candidates[:top_k]]

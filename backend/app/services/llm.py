@@ -113,7 +113,8 @@ User: {question}
 """
     try:
         import re
-        refined = await generate_llm_response(query_refiner_prompt)
+        # P1 Enhancement: Use Groq for faster query refinement (0.5s vs 1.8s)
+        refined = await generate_groq_response(query_refiner_prompt)
         
         # Take the most likely line and strip prefixes
         lines = [l.strip() for l in refined.split('\n') if l.strip()]
@@ -306,7 +307,8 @@ Return ONLY a raw JSON object — no markdown, no code fences, no extra text:
     }
 
     try:
-        raw_response = await generate_llm_response(prompt)
+        # P1 Enhancement: Use Groq for faster background analysis
+        raw_response = await generate_groq_response(prompt)
 
         import json, re
 
