@@ -3,6 +3,7 @@ REST API routes for User CRUD operations.
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
+from fastapi.responses import FileResponse
 import os
 import shutil
 from app.core.database import db
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post("/", response_model=UserResponse, status_code=201)
 async def create_user(payload: UserCreate):
-    """Create a new user."""
+    """Create a new user with hashed password."""
     # Check for duplicate email
     existing = await db.user.find_unique(where={"email": payload.email})
     if existing:
@@ -25,6 +26,7 @@ async def create_user(payload: UserCreate):
     user = await db.user.create(
         data={
             "email": payload.email,
+            "password": get_password_hash(payload.password),
             "name": payload.name,
             "avatar": payload.avatar,
         }
@@ -36,16 +38,17 @@ async def create_user(payload: UserCreate):
 async def list_users(
     skip: int = Query(0, ge=0),
     take: int = Query(20, ge=1, le=100),
+    current_user=Depends(get_current_user),
 ):
-    """List all users with pagination."""
+    """List all users with pagination. (Protected)"""
     users = await db.user.find_many(skip=skip, take=take, order={"createdAt": "desc"})
     total = await db.user.count()
     return {"data": users, "total": total}
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str):
-    """Get a single user by ID."""
+async def get_user(user_id: str, current_user=Depends(get_current_user)):
+    """Get a single user by ID. (Protected)"""
     user = await db.user.find_unique(where={"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -53,8 +56,11 @@ async def get_user(user_id: str):
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: str, payload: UserUpdate):
-    """Update user fields."""
+async def update_user(user_id: str, payload: UserUpdate, current_user=Depends(get_current_user)):
+    """Update user fields. (Owner only)"""
+    if user_id != current_user.id:
+         raise HTTPException(status_code=403, detail="Not authorized to update this user")
+
     user = await db.user.find_unique(where={"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -86,8 +92,8 @@ async def upload_avatar(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    # URL for the avatar (serving via /uploads mount)
-    avatar_url = f"/uploads/{file_name}"
+    # URL for the avatar (serving via the new API route)
+    avatar_url = f"/api/users/avatar/{file_name}"
     
     updated = await db.user.update(
         where={"id": current_user.id},
@@ -97,11 +103,28 @@ async def upload_avatar(
 
 
 @router.delete("/{user_id}", status_code=204)
-async def delete_user(user_id: str):
-    """Delete a user."""
+async def delete_user(user_id: str, current_user=Depends(get_current_user)):
+    """Delete a user. (Owner only)"""
+    if user_id != current_user.id:
+         raise HTTPException(status_code=403, detail="Not authorized to delete this user")
+         
     user = await db.user.find_unique(where={"id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     await db.user.delete(where={"id": user_id})
     return None
+
+
+@router.get("/avatar/{filename}")
+async def get_avatar(filename: str):
+    """Serve user avatars publicly."""
+    # Safety Check: only allows avatar_ prefixed files
+    if not filename.startswith("avatar_"):
+        raise HTTPException(status_code=403, detail="Not authorized to access this file type")
+        
+    file_path = os.path.join("uploads", filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Avatar not found")
+        
+    return FileResponse(file_path)

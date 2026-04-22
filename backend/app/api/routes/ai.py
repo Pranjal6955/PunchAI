@@ -24,9 +24,10 @@ class AiFixResponse(BaseModel):
 
 
 # ── Groq client (lazy singleton) ─────────────────────────────────────────────
+from groq import AsyncGroq
 
-def _get_groq_client() -> Groq:
-    return Groq(api_key=settings.GROQ_API_KEY)
+def _get_groq_client() -> AsyncGroq:
+    return AsyncGroq(api_key=settings.GROQ_API_KEY)
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ async def ai_fix(
 
     try:
         client = _get_groq_client()
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_message},

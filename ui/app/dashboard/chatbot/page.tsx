@@ -11,32 +11,25 @@ import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
 import { BotCard } from "@/components/dashboard/bot-card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import useSWR from "swr";
 
 export default function ChatbotsPage() {
-  const [bots, setBots] = useState<Bot[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: bots = [], error: botsError, mutate: mutateBots } = useSWR("all-bots", () => getBots());
+  const { data: profile } = useSWR("user-profile", getProfile);
+
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [user, setUser] = useState<unknown>(null);
-
-  const fetchBots = async () => {
-    setLoading(true);
-    try {
-      const profile = await getProfile();
-      setUser(profile);
-      const data = await getBots();
-      setBots(data);
-    } catch (error) {
-      toast.error("Failed to load agents");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    void fetchBots();
-  }, []);
+    if (bots.length > 0 || botsError) {
+      setLoadingInitial(false);
+    }
+  }, [bots, botsError]);
+
+  const fetchBots = async () => {
+    await mutateBots();
+  };
 
   const handleDeleteBot = async (botId: string) => {
     if (
@@ -51,7 +44,7 @@ export default function ChatbotsPage() {
       const success = await deleteBot(botId);
       if (success) {
         toast.success("Agent deleted successfully");
-        setBots(bots.filter((b) => b.id !== botId));
+        await mutateBots();
       } else {
         toast.error("Failed to delete agent");
       }
@@ -67,7 +60,7 @@ export default function ChatbotsPage() {
     );
   });
 
-  if (loading && bots.length === 0) {
+  if (loadingInitial && bots.length === 0) {
     return (
       <div className="min-h-full w-full space-y-8 p-4">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">

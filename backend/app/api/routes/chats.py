@@ -3,7 +3,7 @@ REST API routes for Chat and Message operations with full RAG (Retrieval-Augment
 Integrates local ChromaDB and local Ollama (Llama 3).
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from app.core.database import db
 from app.schemas.chat import (
     ChatCreate,
@@ -16,6 +16,7 @@ from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_llm_response
+from app.services.analytics import update_chat_insights
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -35,6 +36,7 @@ async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user
             "title": payload.title or f"Chat with {bot.name}",
             "user": {"connect": {"id": payload.userId}},
             "bot": {"connect": {"id": payload.botId}},
+            "isExternal": False,
         },
         include={"messages": True}
     )
@@ -47,6 +49,7 @@ async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user
 async def add_message(
     chat_id: str, 
     payload: MessageCreate, 
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user)
 ):
     """
@@ -59,24 +62,45 @@ async def add_message(
     if not chat or chat.userId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
+    # Bug 4 fix: validate message content server-side
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message content cannot be empty")
+    if len(content) > 2000:
+        raise HTTPException(status_code=422, detail="Message too long (max 2000 characters)")
+
     # 1. Save User Message
     user_msg = await db.message.create(
         data={
             "role": "USER",
-            "content": payload.content,
+            "content": content,
             "chat": {"connect": {"id": chat_id}},
         }
     )
 
     # 2. Hybrid RAG Retrieval (Vector + Keyword)
-    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=payload.content, top_k=5)
+    # Improvement: Refine search query to strip conversational noise (Bug fix for RAG effectiveness)
+    from app.services.llm import get_search_query
     
-    # Optional: Log the retrieved context into the user's message metadata
-    await db.message.update(where={"id": user_msg.id}, data={"metadata": Json({"chunks": context_chunks})})
+    # Fetch top history items for query refinement
+    refinement_history = await db.message.find_many(
+        where={"chatId": chat_id, "NOT": {"id": user_msg.id}},
+        order={"createdAt": "desc"},
+        take=3
+    )
+    search_query = await get_search_query(content, refinement_history)
+    
+    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=search_query, top_k=5)
+
+    # Optional: Log the retrieved context/refined query into metadata
+    await db.message.update(
+        where={"id": user_msg.id}, 
+        data={"metadata": Json({"chunks": context_chunks, "refined_query": search_query})}
+    )
 
     # 3. LLM Generation (OpenRouter with Groq Fallback)
-    
-    # Fetch recent chat history (last 5 messages before the current one)
+
+    # Bug 5 fix: fetch last 10 messages for better conversational context (was 5)
     history = await db.message.find_many(
         where={
             "chatId": chat_id,
@@ -85,18 +109,19 @@ async def add_message(
             }
         },
         order={"createdAt": "desc"},
-        take=5
+        take=10
     )
     history.reverse()  # Chronological order
 
-    prompt = build_rag_prompt(
-        persona=chat.bot.botPersona, 
-        context=context_chunks, 
-        question=payload.content,
+    # Structured prompt returns a dict {system, user}
+    structured_prompt = build_rag_prompt(
+        persona=chat.bot.botPersona,
+        context=context_chunks,
+        question=content,
         history=history
     )
     
-    ai_text = await generate_llm_response(prompt)
+    ai_text = await generate_llm_response(structured_prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
@@ -108,6 +133,9 @@ async def add_message(
         }
     )
 
+    # Part #1 & #3: Trigger AI Summary/Sentiment in Background
+    background_tasks.add_task(update_chat_insights, chat_id)
+
     # Return the assistant's message as the reply
     return assistant_msg
 
@@ -116,10 +144,22 @@ async def add_message(
 async def get_chat(chat_id: str, current_user=Depends(get_current_user)):
     chat = await db.chat.find_unique(
         where={"id": chat_id},
-        include={"messages": {"order": {"createdAt": "asc"}}}
+        include={
+            "messages": True,
+            "bot": True
+        }
     )
-    if not chat or chat.userId != current_user.id:
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Sort messages in Python
+    if chat.messages:
+        chat.messages.sort(key=lambda x: x.createdAt)
+        
+    # Allow if requester is the chat creator OR the bot owner
+    if chat.userId != current_user.id and chat.bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
+        
     return chat
 
 
@@ -132,11 +172,42 @@ async def list_chats(userId: str = Query(...), current_user=Depends(get_current_
     return {"data": chats, "total": len(chats)}
 
 
+@router.get("/owner/all", response_model=ChatListResponse)
+async def list_all_owner_chats(
+    isExternal: bool | None = Query(default=None, description="Filter by chat type: true=external, false=internal, omit=all"),
+    current_user=Depends(get_current_user)
+):
+    """List all conversations for all bots owned by the current user."""
+    # 1. Get all bot IDs owned by the user
+    bots = await db.bot.find_many(where={"ownerId": current_user.id})
+    bot_ids = [b.id for b in bots]
+    
+    # 2. Build filter — optionally scope to internal or external chats
+    where_clause: dict = {"botId": {"in": bot_ids}}
+    if isExternal is not None:
+        where_clause["isExternal"] = isExternal
+
+    # 3. Get all chats for these bots
+    chats = await db.chat.find_many(
+        where=where_clause,
+        order={"updatedAt": "desc"}
+    )
+    return {"data": chats, "total": len(chats)}
+
+
 @router.delete("/{chat_id}", status_code=204)
 async def delete_chat(chat_id: str, current_user=Depends(get_current_user)):
-    chat = await db.chat.find_unique(where={"id": chat_id})
-    if not chat or chat.userId != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    """Delete a chat. (Creator or Bot Owner only)"""
+    chat = await db.chat.find_unique(where={"id": chat_id}, include={"bot": True})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Permission: User is the creator OR User is the owner of the bot
+    is_creator = chat.userId == current_user.id
+    is_bot_owner = chat.bot.ownerId == current_user.id
+    
+    if not is_creator and not is_bot_owner:
+        raise HTTPException(status_code=403, detail="Unauthorized to delete this chat")
 
     await db.chat.delete(where={"id": chat_id})
     return None

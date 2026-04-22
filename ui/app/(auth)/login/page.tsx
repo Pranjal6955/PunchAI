@@ -205,6 +205,7 @@ export default function LoginPage() {
             alt="PunchAI"
             width={120}
             height={40}
+            priority
             className="h-10 w-auto object-contain"
           />
         </div>
@@ -231,6 +232,7 @@ export default function LoginPage() {
             alt="PunchAI"
             width={120}
             height={40}
+            priority
             className="h-10 w-auto object-contain"
           />
         </div>

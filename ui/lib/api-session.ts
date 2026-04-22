@@ -297,6 +297,14 @@ export interface Chat {
   title: string;
   userId: string;
   botId: string;
+  isExternal: boolean;
+  visitorId?: string;
+  externalUserId?: string;
+  externalUserName?: string;
+  externalUserEmail?: string;
+  summary?: string;
+  sentiment?: string;
+  customMetadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   messages?: Message[];
@@ -309,6 +317,28 @@ export interface ChatListResponse {
 
 export const getChats = async (userId: string): Promise<Chat[]> => {
   const res = await authorizedFetch(`/api/chats/?userId=${userId}`);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<ChatListResponse>(res);
+  return data?.data || [];
+};
+
+export const getAllOwnerChats = async (isExternal?: boolean): Promise<Chat[]> => {
+  const url =
+    isExternal !== undefined
+      ? `/api/chats/owner/all?isExternal=${isExternal}`
+      : "/api/chats/owner/all";
+  const res = await authorizedFetch(url);
+  if (!res.ok) return [];
+  const data = await parseJsonSafely<ChatListResponse>(res);
+  return data?.data || [];
+};
+
+export const getBotChats = async (botId: string, isExternal?: boolean): Promise<Chat[]> => {
+  let url = `/api/bots/${botId}/conversations`;
+  if (isExternal !== undefined) {
+    url += `?isExternal=${isExternal}`;
+  }
+  const res = await authorizedFetch(url);
   if (!res.ok) return [];
   const data = await parseJsonSafely<ChatListResponse>(res);
   return data?.data || [];

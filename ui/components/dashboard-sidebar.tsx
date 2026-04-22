@@ -39,25 +39,15 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { logoutSession, getProfile, getAvatarUrl } from "@/lib/api-session";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; avatar?: string } | null>(null);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const data = await getProfile();
-        setUser(data);
-      } catch (error) {
-        console.error("Failed to fetch user profile", error);
-      }
-    };
-    fetchUser();
-  }, []);
+  const { data: user } = useSWR("user-profile", getProfile);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -82,9 +72,6 @@ export function DashboardSidebar() {
                 <div className="ml-3 grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="text-sidebar-foreground truncate font-bold tracking-tight">
                     Punch Studio
-                  </span>
-                  <span className="text-muted-foreground/70 truncate text-[10px] font-medium tracking-wider uppercase">
-                    Chatbot as a Service
                   </span>
                 </div>
               </Link>
@@ -126,6 +113,18 @@ export function DashboardSidebar() {
                 <Link href="/dashboard/dataSource">
                   <Database className="size-4" />
                   <span>Data Sources</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith("/dashboard/chatlogs")}
+                tooltip="Chat Logs"
+              >
+                <Link href="/dashboard/chatlogs">
+                  <GalleryVerticalEnd className="size-4" />
+                  <span>Chat Logs</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

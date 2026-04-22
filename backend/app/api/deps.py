@@ -36,7 +36,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
 
     return user
-
+async def get_optional_user(token: str | None = Header(None, alias="Authorization")):
+    """
+    Optional user validation. Returns User object if valid token provided, else None.
+    """
+    if not token or not token.startswith("Bearer "):
+        return None
+        
+    try:
+        actual_token = token.split(" ")[1]
+        payload = jwt.decode(actual_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+        return await db.user.find_unique(where={"id": user_id})
+    except (JWTError, IndexError):
+        return None
 
 async def get_bot_by_api_key(
     request: Request,

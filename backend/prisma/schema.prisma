@@ -83,6 +83,10 @@ model DocumentChunk {
     botId String @map("bot_id")
     bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
 
+    // Recommended: Run the following SQL to enable Performant Keyword Search:
+    // CREATE INDEX document_chunks_content_idx ON document_chunks USING GIN (to_tsvector('english', content));
+    // CREATE INDEX document_chunks_bot_id_idx ON document_chunks (bot_id);
+
     @@map("document_chunks")
 }
 
@@ -117,6 +121,21 @@ model Chat {
     bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
 
     messages Message[]
+
+    // Tracks if this conversation is via the external widget
+    isExternal Boolean @default(false) @map("is_external")
+    // Tracks unique anonymous users/sessions
+    visitorId  String? @map("visitor_id")
+
+    // --- NEW: External User Tracking (for users of the Admin's website) ---
+    externalUserId    String? @map("external_user_id")
+    externalUserName  String? @map("external_user_name")
+    externalUserEmail String? @map("external_user_email")
+
+    // --- NEW: AI Insights & Analytics ---
+    summary        String? @db.Text
+    sentiment      String? // e.g., "Happy", "Neutral", "Frustrated"
+    customMetadata Json?   @map("custom_metadata")
 
     @@map("chats")
 }

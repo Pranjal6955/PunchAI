@@ -99,9 +99,9 @@ app.include_router(chats_router, prefix=API_PREFIX)
 app.include_router(ai_router, prefix=API_PREFIX)
 app.include_router(external_router, prefix=API_PREFIX)
 
-# ── Static Files ──
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Avatars will now be served via a dedicated public route, 
+# and DataSource files will be served via an owner-only route for security.
+# app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # ── Root ──
