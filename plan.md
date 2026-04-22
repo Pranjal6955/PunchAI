@@ -21,13 +21,13 @@ This document outlines the planned features, architectural improvements, and opt
 ## 🧠 Phase 2: Advanced RAG Capabilities (Backend)
 *Priority: High*
 
-- [ ] **Extended Format Support**:
+- [x] **Extended Format Support**:
     - Implement parsers for Excel (`.xlsx`), Word (`.docx`), and PowerPoint (`.pptx`).
     - Integrate `unstructured` library for more robust document chunking.
-- [ ] **Hybrid Search V2**:
+- [x] **Hybrid Search V2**:
     - Explore **GraphRAG** (Knowledge Graphs) alongside vector search for relationship-heavy queries.
     - Implement **Query Expansion** to improve retrieval relevance for short queries.
-- [ ] **Automated Evaluation**:
+- [x] **Automated Evaluation**:
     - Integrate **RAGAS** for automated testing of Faithfulness, Relevancy, and Accuracy.
     - Create a `test_rag.py` suite that runs on every CI/CD pipeline.
 

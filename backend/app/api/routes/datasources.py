@@ -22,7 +22,16 @@ from app.schemas.datasource import (
     ChunkUpdate,
 )
 from app.api.deps import get_current_user
-from app.utils.extractor import extract_text_from_pdf, extract_text_from_url, clean_faq_text, format_faqs_to_text
+from app.utils.extractor import (
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    extract_text_from_xlsx,
+    extract_text_from_pptx,
+    extract_text_universal,
+    extract_text_from_url,
+    clean_faq_text,
+    format_faqs_to_text
+)
 from app.core.logging import logger
 from app.services.processor import process_and_store
 
@@ -33,40 +42,63 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload", response_model=DataSourceResponse)
-async def upload_pdf(
+async def upload_file(
     botId: str = Form(...),
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
 ):
-    """Upload PDF -> Specialized Content Cleaning -> RAG Preprocessing."""
+    """Upload File (PDF, DOCX, XLSX, PPTX) -> Specialized Extraction -> RAG Preprocessing."""
     bot = await db.bot.find_unique(where={"id": botId})
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     # Sanitize filename to prevent path traversal
-    safe_filename = os.path.basename(file.filename)
+    filename = file.filename
+    safe_filename = os.path.basename(filename)
     file_path = os.path.join(UPLOAD_DIR, f"{botId}_{safe_filename}")
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     ds = await db.datasource.create(
         data={
-            "name": file.filename, "type": "FILE", "status": "PROCESSING",
+            "name": filename, "type": "FILE", "status": "PROCESSING",
             "fileUrl": file_path, "bot": {"connect": {"id": botId}},
         }
     )
 
-    # 1. Specialized PDF Extraction & Cleaning (handles page numbers/artifacts)
-    content = await run_in_threadpool(extract_text_from_pdf, file_path)
-    if content:
-        # process_and_store now handles both splitting into granular chunks 
-        # and saving them to both ChromaDB and Postgres SQL.
-        await process_and_store(
-            bot_id=botId, source_id=ds.id, raw_text=content, 
-            metadata={"source_name": safe_filename, "type": "PDF"}
-        )
-        await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
-    else:
+    # 1. Choose specialized extractor based on file extension
+    ext = os.path.splitext(safe_filename)[1].lower()
+    
+    try:
+        if ext == ".pdf":
+            content = await run_in_threadpool(extract_text_from_pdf, file_path)
+            doc_type = "PDF"
+        elif ext in [".docx", ".doc"]:
+            content = await run_in_threadpool(extract_text_from_docx, file_path)
+            doc_type = "DOC"
+        elif ext in [".xlsx", ".xls"]:
+            content = await run_in_threadpool(extract_text_from_xlsx, file_path)
+            doc_type = "EXCEL"
+        elif ext in [".pptx", ".ppt"]:
+            content = await run_in_threadpool(extract_text_from_pptx, file_path)
+            doc_type = "PPT"
+        else:
+            # Fallback to unstructured for other types or if specialized fails
+            content = await run_in_threadpool(extract_text_universal, file_path)
+            doc_type = "DOCUMENT"
+
+        if content and content.strip():
+            await process_and_store(
+                bot_id=botId, source_id=ds.id, raw_text=content, 
+                metadata={"source_name": safe_filename, "type": doc_type}
+            )
+            await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
+        else:
+            logger.error(f"Extraction failed for {safe_filename}: No content found")
+            await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
+            
+    except Exception as e:
+        logger.error(f"Error during file processing: {e}")
         await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
 
     return ds

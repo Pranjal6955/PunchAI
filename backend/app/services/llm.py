@@ -3,6 +3,7 @@ LLM Service for PunchAI with OpenRouter and Groq fallback.
 Builds the RAG prompt and generates a response based on retrieved context.
 """
 
+import re
 from typing import List, Optional
 from openai import AsyncOpenAI
 from groq import AsyncGroq
@@ -112,7 +113,6 @@ User: {question}
 ### SEARCH QUERY
 """
     try:
-        import re
         # P1 Enhancement: Use Groq for faster query refinement (0.5s vs 1.8s)
         refined = await generate_groq_response(query_refiner_prompt)
         
@@ -127,7 +127,44 @@ User: {question}
         return final_query if final_query else question
     except Exception:
         return question
+async def generate_expanded_queries(query: str, n: int = 2) -> List[str]:
+    """
+    Query Expansion (P2 Feature):
+    Generates N additional varied queries to improve retrieval recall.
+    """
+    if len(query.split()) < 2:
+        return [query]
 
+    prompt = f"""### TASK
+Generate {n} different search variations for the user query below. 
+These variations should help retrieve different but related knowledge base search terms.
+
+User Query: {query}
+
+Guidelines:
+- Return ONLY the queries, one per line.
+- Do NOT provide numbering, bullets, or extra text.
+- Variations should use synonyms or explore related sub-topics.
+
+### VARIATIONS
+"""
+    try:
+        # Use Groq for speed
+        from app.services.llm import generate_groq_response
+        response = await generate_groq_response(prompt)
+        queries = [l.strip() for l in response.split('\n') if l.strip()]
+        
+        cleaned_queries = [query] # Always start with original
+        for q in queries:
+            # Remove leading numbers/bullets if any
+            q = re.sub(r'^[\d\.\-\*\)\s]+', '', q).strip()
+            if q and q.lower() != query.lower():
+                cleaned_queries.append(q)
+        
+        return cleaned_queries[:n+1]
+    except Exception as e:
+        logger.warning(f"Query expansion failed: {e}")
+        return [query]
 
 
 async def generate_openrouter_response(prompt: str | dict) -> str:

@@ -7,6 +7,10 @@ import httpx
 import re
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
+import docx
+import pandas as pd
+from pptx import Presentation
+from unstructured.partition.auto import partition
 
 
 def clean_pdf_text(text: str) -> str:
@@ -66,6 +70,60 @@ def extract_text_from_pdf(file_path: str) -> str:
         return clean_pdf_text(raw_text)
     except Exception as e:
         print(f"Error extracting PDF: {e}")
+        return ""
+
+
+def extract_text_from_docx(file_path: str) -> str:
+    """Extract text from a Word document."""
+    try:
+        doc = docx.Document(file_path)
+        return "\n".join([para.text for para in doc.paragraphs])
+    except Exception as e:
+        print(f"Error extracting DOCX: {e}")
+        return ""
+
+
+def extract_text_from_xlsx(file_path: str) -> str:
+    """Extract text from an Excel spreadsheet."""
+    try:
+        # Read all sheets
+        df_dict = pd.read_excel(file_path, sheet_name=None)
+        text = ""
+        for sheet_name, df in df_dict.items():
+            text += f"Sheet: {sheet_name}\n"
+            # Replace NaNs with empty string
+            df = df.fillna("")
+            text += df.to_csv(index=False, sep='\t') + "\n\n"
+        return text
+    except Exception as e:
+        print(f"Error extracting XLSX: {e}")
+        return ""
+
+
+def extract_text_from_pptx(file_path: str) -> str:
+    """Extract text from a PowerPoint presentation."""
+    try:
+        prs = Presentation(file_path)
+        text = ""
+        for i, slide in enumerate(prs.slides):
+            text += f"Slide {i+1}:\n"
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text += shape.text + "\n"
+            text += "\n"
+        return text
+    except Exception as e:
+        print(f"Error extracting PPTX: {e}")
+        return ""
+
+
+def extract_text_universal(file_path: str) -> str:
+    """Extract text using unstructured library as a robust fallback."""
+    try:
+        elements = partition(filename=file_path)
+        return "\n\n".join([str(el) for el in elements])
+    except Exception as e:
+        print(f"Error using unstructured extractor: {e}")
         return ""
 
 
