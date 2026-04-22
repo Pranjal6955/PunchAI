@@ -28,27 +28,41 @@ import {
 } from "@/lib/api-session";
 import { useSearchParams } from "next/navigation";
 import { Bot as BotIcon } from "lucide-react";
+import { useBots } from "@/hooks/use-bots";
+import { useDataSources } from "@/hooks/use-data-sources";
 import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
 
 export default function DataSourcesPage() {
   const searchParams = useSearchParams();
   const botIdParam = searchParams.get("botId");
 
-  const [bots, setBots] = React.useState<Bot[]>([]);
-  const [selectedBotId, setSelectedBotId] = React.useState<string>("");
-  const [dataSources, setDataSources] = React.useState<DataSource[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [sourcesLoading, setSourcesLoading] = React.useState(false);
-  const [actionLoading, setActionLoading] = React.useState(false);
-  const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([]);
-
-  // View/Edit state
   const [viewingSource, setViewingSource] = React.useState<DataSource | null>(null);
   const [sourceContent, setSourceContent] = React.useState<{
     chunks: DocumentChunk[];
     faqs: FAQ[];
   }>({ chunks: [], faqs: [] });
   const [contentLoading, setContentLoading] = React.useState(false);
+
+  const { bots, isLoading: botsLoading, mutate: mutateBots } = useBots();
+  const [selectedBotId, setSelectedBotId] = React.useState<string>("");
+  const { dataSources, isLoading: sourcesLoading, mutate: mutateSources, removeDataSource } = useDataSources(selectedBotId);
+
+  const [actionLoading, setActionLoading] = React.useState(false);
+  const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([]);
+
+  // Set default selectedBotId
+  React.useEffect(() => {
+    if (bots.length > 0) {
+      if (botIdParam && bots.some((b) => b.id === botIdParam)) {
+        setSelectedBotId(botIdParam);
+      } else if (!selectedBotId) {
+        setSelectedBotId(bots[0].id);
+      }
+    }
+  }, [bots, botIdParam, selectedBotId]);
+
+  const loading = botsLoading && bots.length === 0;
+
   const [itemUpdating, setItemUpdating] = React.useState<string | null>(null);
   const [isDataModalOpen, setIsDataModalOpen] = React.useState(false);
 
@@ -57,46 +71,6 @@ export default function DataSourcesPage() {
   const [faqName, setFaqName] = React.useState("");
   const [faqs, setFaqs] = React.useState([{ question: "", answer: "" }]);
   const [file, setFile] = React.useState<File | null>(null);
-
-  const fetchBots = React.useCallback(async () => {
-    try {
-      const userBots = await getBots();
-      setBots(userBots);
-
-      // Priority: Query param > Current state > First bot
-      if (botIdParam && userBots.some((b) => b.id === botIdParam)) {
-        setSelectedBotId(botIdParam);
-      } else if (userBots.length > 0 && !selectedBotId) {
-        setSelectedBotId(userBots[0].id);
-      }
-    } catch (error) {
-      console.error("Failed to fetch bots:", error);
-      toast.error("Failed to load chatbots");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedBotId, botIdParam]);
-
-  React.useEffect(() => {
-    void fetchBots();
-  }, [fetchBots]);
-
-  React.useEffect(() => {
-    const fetchSources = async () => {
-      if (!selectedBotId) return;
-      setSourcesLoading(true);
-      try {
-        const sources = await getDataSources(selectedBotId);
-        setDataSources(sources);
-      } catch (error) {
-        console.error("Failed to fetch sources:", error);
-        toast.error("Failed to load data sources");
-      } finally {
-        setSourcesLoading(false);
-      }
-    };
-    void fetchSources();
-  }, [selectedBotId]);
 
   const handleFileUpload = async () => {
     if (!selectedBotId || !file) return false;
@@ -107,8 +81,7 @@ export default function DataSourcesPage() {
         toast.success("File uploaded and processed successfully");
         setFile(null);
         // Refresh sources
-        const sources = await getDataSources(selectedBotId);
-        setDataSources(sources);
+        await mutateSources();
         return true;
       } else {
         toast.error("Failed to upload file");
@@ -133,8 +106,7 @@ export default function DataSourcesPage() {
         toast.success("Website synchronized successfully");
         setUrl("");
         // Refresh sources
-        const sources = await getDataSources(selectedBotId);
-        setDataSources(sources);
+        await mutateSources();
         return true;
       } else {
         toast.error("Failed to sync website");
@@ -162,8 +134,7 @@ export default function DataSourcesPage() {
         setFaqName("");
         setFaqs([{ question: "", answer: "" }]);
         // Refresh sources
-        const sources = await getDataSources(selectedBotId);
-        setDataSources(sources);
+        await mutateSources();
         return true;
       } else {
         toast.error("Failed to add FAQs");
@@ -180,18 +151,10 @@ export default function DataSourcesPage() {
 
   const handleDelete = async (dsId: string) => {
     if (!confirm("Are you sure you want to delete this data source?")) return;
-    try {
-      const success = await deleteDataSource(dsId);
-      if (success) {
-        setDataSources((prev) => prev.filter((ds) => ds.id !== dsId));
-        setSelectedSourceIds((prev) => prev.filter((id) => id !== dsId));
-        if (viewingSource?.id === dsId) setViewingSource(null);
-        toast.success("Data source removed");
-      } else {
-        toast.error("Failed to delete");
-      }
-    } catch {
-      toast.error("An error occurred during deletion");
+    const success = await removeDataSource(dsId);
+    if (success) {
+      setSelectedSourceIds((prev) => prev.filter((id) => id !== dsId));
+      if (viewingSource?.id === dsId) setViewingSource(null);
     }
   };
 
@@ -210,7 +173,7 @@ export default function DataSourcesPage() {
         }
       }
 
-      setDataSources((prev) => prev.filter((ds) => !selectedSourceIds.includes(ds.id)));
+      await mutateSources();
       setSelectedSourceIds([]);
       toast.success(`Successfully deleted ${successCount} sources`);
     } catch (error) {
@@ -378,7 +341,7 @@ export default function DataSourcesPage() {
                 onAddFaqField={addFaqField}
                 onRemoveFaqField={removeFaqField}
                 onUpdateFaqField={updateFaqField}
-                onAgentCreated={fetchBots}
+                onAgentCreated={mutateBots}
                 isDataModalOpen={isDataModalOpen}
                 setIsDataModalOpen={setIsDataModalOpen}
                 hasDataSources={dataSources.length > 0}
@@ -399,7 +362,7 @@ export default function DataSourcesPage() {
               You need to create at least one chatbot agent before you can connect data sources.
               Data is added specifically to an individual agent.
             </p>
-            <CreateAgentDialog onSuccess={fetchBots} />
+            <CreateAgentDialog onSuccess={mutateBots} />
           </div>
         ) : (
           <div className="flex flex-col gap-8">

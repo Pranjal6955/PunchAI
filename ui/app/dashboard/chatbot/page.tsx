@@ -11,21 +11,17 @@ import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
 import { BotCard } from "@/components/dashboard/bot-card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import useSWR from "swr";
+import { useBots } from "@/hooks/use-bots";
+import { useUser } from "@/hooks/use-user";
 
 export default function ChatbotsPage() {
-  const { data: bots = [], error: botsError, mutate: mutateBots } = useSWR("all-bots", () => getBots());
-  const { data: profile } = useSWR("user-profile", getProfile);
+  const { bots, isLoading: botsLoading, mutate: mutateBots, removeBot } = useBots();
+  const { user: profile } = useUser();
 
-  const [loadingInitial, setLoadingInitial] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-  useEffect(() => {
-    if (bots.length > 0 || botsError) {
-      setLoadingInitial(false);
-    }
-  }, [bots, botsError]);
+  const loadingInitial = botsLoading && bots.length === 0;
 
   const fetchBots = async () => {
     await mutateBots();
@@ -39,18 +35,7 @@ export default function ChatbotsPage() {
     ) {
       return;
     }
-
-    try {
-      const success = await deleteBot(botId);
-      if (success) {
-        toast.success("Agent deleted successfully");
-        await mutateBots();
-      } else {
-        toast.error("Failed to delete agent");
-      }
-    } catch (error) {
-      toast.error("An error occurred while deleting");
-    }
+    await removeBot(botId);
   };
 
   const filteredBots = bots.filter((bot) => {

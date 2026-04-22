@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   title: "Punch Studio",
   description: "Punch Studio - Chatbot as a Service",
   icons: {
-    icon: "/Logo_dark_theme.png",
+    icon: "/Logo_dark_theme.webp",
   },
 };
 

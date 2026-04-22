@@ -40,14 +40,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { logoutSession, getProfile, getAvatarUrl } from "@/lib/api-session";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import useSWR from "swr";
+import { useUser } from "@/hooks/use-user";
 
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const { data: user } = useSWR("user-profile", getProfile);
+  const { user } = useUser();
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -63,7 +63,7 @@ export function DashboardSidebar() {
             <SidebarMenuButton size="lg" asChild className="hover:bg-transparent">
               <Link href="/dashboard" className="flex items-center">
                 <Image
-                  src="/Logo_dark_theme.png"
+                  src="/Logo_dark_theme.webp"
                   alt="PunchAI Logo"
                   width={32}
                   height={32}
