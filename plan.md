@@ -36,7 +36,7 @@ This document outlines the planned features, architectural improvements, and opt
 
 - [x] **Pro Playground**:
     - Add a "Retrieved Context" panel showing raw chunks, scores, and source names.
-    - Add a toggle to switch between LLM models (e.g., GPT-4o vs Groq Llama 3) for side-by-side comparison.
+    - [ ] Add a toggle to switch between LLM models (Deferred for future implementation)
 - [x] **Widget Customizer**:
     - Build a "Theme Settings" UI to control widget colors, fonts, and brand logo.
     - Allow customization of the initial "Welcome Message" and suggestion chips.

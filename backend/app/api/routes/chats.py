@@ -17,6 +17,7 @@ from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_llm_response
 from app.services.analytics import update_chat_insights
+from app.core.config import settings
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 

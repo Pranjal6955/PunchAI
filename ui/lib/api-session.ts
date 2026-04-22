@@ -292,6 +292,12 @@ export const createFaq = async (botId: string, question: string, answer: string)
   return res.ok;
 };
 
+export const getSuggestedQuestions = async (botId: string): Promise<string[]> => {
+  const res = await authorizedFetch(`/api/bots/${botId}/suggested-questions`);
+  if (!res.ok) return [];
+  return (await parseJsonSafely<string[]>(res)) || [];
+};
+
 export const generateBotApiKey = async (botId: string): Promise<Bot | null> => {
   const res = await authorizedFetch(`/api/bots/${botId}/api-key`, {
     method: "POST",

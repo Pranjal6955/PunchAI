@@ -8,6 +8,7 @@ import {
   addMessage,
   createChat,
   getChat,
+  getSuggestedQuestions,
   Bot,
   User,
   Message,
@@ -31,6 +32,7 @@ import {
   X,
   ThumbsUp,
   ThumbsDown,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -149,49 +151,57 @@ function CitationChip({ count, onClick }: { count: number, onClick?: () => void 
 function ContextPanel({
   chunks,
   onClose,
-  modelName
 }: {
-  chunks: string[] | null,
+  chunks: any[] | null,
   onClose: () => void,
-  modelName?: string
 }) {
   return (
-    <div className="border-border/40 bg-background flex h-full w-[350px] shrink-0 flex-col border-l">
-      <div className="border-border/40 flex h-12 items-center justify-between border-b px-4">
+    <div className="border-border/40 bg-background flex h-full w-[350px] shrink-0 animate-in slide-in-from-right duration-300 flex-col border-l">
+      <div className="border-border/40 flex h-16 items-center justify-between border-b px-6">
         <div className="flex items-center gap-2">
-          <Database className="text-primary size-3.5" />
-          <span className="text-[10px] font-bold tracking-widest uppercase">Retrieved Context</span>
+          <Database className="text-primary size-4" />
+          <span className="text-[11px] font-bold tracking-widest uppercase">Knowledge Sync</span>
         </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors p-2 hover:bg-muted">
           <X className="size-4" />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {modelName && (
-          <div className="bg-primary/5 border-primary/20 border p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="text-primary size-3" />
-              <span className="text-[9px] font-bold tracking-widest uppercase">AI Engine</span>
-            </div>
-            <p className="text-[11px] font-medium text-primary/80">{modelName}</p>
-          </div>
-        )}
 
+      <div className="flex-1 overflow-y-auto px-6 py-6 divide-y divide-border/40">
         {!chunks || chunks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center opacity-40">
-            <Info className="size-8 mb-2" />
-            <p className="text-[10px] font-bold tracking-widest uppercase">No context retrieved</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center opacity-30">
+            <Info className="size-8 mb-3" />
+            <p className="text-[10px] font-bold tracking-widest uppercase">Query had no citations</p>
           </div>
         ) : (
-          chunks.map((chunk, i) => (
-            <div key={i} className="border-border/60 bg-muted/5 border p-3">
-              <div className="text-muted-foreground/50 mb-2 text-[9px] font-bold tracking-widest uppercase">
-                Chunk #{i + 1}
+          chunks.map((chunk, i) => {
+            const content = typeof chunk === 'string' ? chunk : (chunk.content || "");
+            const score = typeof chunk === 'object' ? chunk.score : null;
+
+            return (
+              <div key={i} className="py-6 first:pt-0">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[9px] font-bold tracking-widest uppercase text-muted-foreground/60">
+                    Evidence Block {i + 1}
+                  </span>
+                  {score !== null && (
+                    <span className="text-[8px] font-mono text-emerald-500/80">
+                      Match: {(1 - score).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs leading-relaxed text-muted-foreground/90 font-medium italic">
+                  "{content}"
+                </div>
               </div>
-              <p className="text-xs leading-relaxed text-foreground/80 whitespace-pre-wrap">{chunk}</p>
-            </div>
-          ))
+            );
+          })
         )}
+      </div>
+      <div className="p-6 bg-muted/5 border-t border-border/40">
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          These snippets represent the raw information retrieved from your vector store to generate this specific response.
+        </p>
       </div>
     </div>
   );
@@ -212,11 +222,13 @@ export default function PlaygroundPage() {
   const [sending, setSending] = React.useState(false);
   const [chatId, setChatId] = React.useState<string | null>(null);
   const [hasDataSources, setHasDataSources] = React.useState<boolean | null>(null);
+  const [suggestedQuestions, setSuggestedQuestions] = React.useState<string[]>([]);
+  const [questionsLoading, setQuestionsLoading] = React.useState(false);
 
   // Pro Playground states (Phase 3)
-  const [selectedModel, setSelectedModel] = React.useState<string>("default");
   const [activeContext, setActiveContext] = React.useState<string[] | null>(null);
   const [showContextPanel, setShowContextPanel] = React.useState(false);
+  const [isFocused, setIsFocused] = React.useState(false);
 
   // Improvement C: copy-to-clipboard
   const { copiedId, copy } = useCopyToClipboard();
@@ -247,7 +259,16 @@ export default function PlaygroundPage() {
         setUser(profile);
 
         // Bug 6 fix: warn when bot has no data sources
-        setHasDataSources((botData.dataSourceCount ?? 0) > 0);
+        const hasDS = (botData.dataSourceCount ?? 0) > 0;
+        setHasDataSources(hasDS);
+
+        if (hasDS) {
+          setQuestionsLoading(true);
+          getSuggestedQuestions(Id as string).then(qs => {
+            setSuggestedQuestions(qs);
+            setQuestionsLoading(false);
+          });
+        }
 
         // Bug 8 fix: reuse existing session stored in sessionStorage
         const storedChatId = sessionStorage.getItem(sessionKey);
@@ -319,6 +340,7 @@ export default function PlaygroundPage() {
         id: tempId,
         role: "USER",
         content: trimmed,
+        chatId,
         createdAt: new Date().toISOString(),
       };
 
@@ -329,8 +351,7 @@ export default function PlaygroundPage() {
       try {
         const reply = await addMessage(
           chatId,
-          trimmed,
-          selectedModel === "default" ? undefined : selectedModel
+          trimmed
         );
         if (reply) {
           // Bug 1 fix: keep user temp (content correct), append assistant reply
@@ -400,15 +421,22 @@ export default function PlaygroundPage() {
 
   const handleFeedback = async (msgId: string, feedback: number) => {
     if (!chatId) return;
+
+    // Optimistic Update
+    const previousMessages = [...messages];
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, feedback } : m))
+    );
+
     try {
       const success = await submitFeedback(chatId, msgId, feedback);
       if (success) {
-        setMessages((prev) =>
-          prev.map((m) => m.id === msgId ? { ...m, feedback } : m)
-        );
         toast.success(feedback === 1 ? "Positive feedback recorded" : "Negative feedback recorded");
+      } else {
+        throw new Error("Failed");
       }
     } catch {
+      setMessages(previousMessages); // Revert
       toast.error("Failed to submit feedback");
     }
   };
@@ -431,333 +459,326 @@ export default function PlaygroundPage() {
   if (!bot || !user) return null;
 
   return (
-    <div className="bg-background flex h-[calc(100vh-64px)] flex-col overflow-hidden font-sans">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="border-border/40 flex h-16 items-center justify-between gap-4 border-b px-6">
-        <div className="flex items-center gap-4">
-          <Link href={`/dashboard/chatbot/${Id as string}`}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hover:bg-muted h-8 w-8 rounded-none"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-      </div>
+    <div className="bg-background flex h-[calc(100vh-64px)] flex-col overflow-hidden font-sans relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-muted/20 via-background to-background">
+      {/* Absolute Background Layer (Fixed) */}
+      <div className="absolute inset-0 z-0 opacity-[0.15] pointer-events-none bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]" />
 
-      <div className="flex items-center gap-3">
-        {/* Model Selector (Phase 3) */}
-        <div className="bg-muted/10 border-border/40 hidden items-center gap-2 border px-3 py-1.5 md:flex">
-          <Settings2 className="text-muted-foreground size-3.5" />
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="bg-transparent text-[10px] font-bold tracking-widest uppercase outline-none"
-          >
-            <option value="default py-1">Smart (Default)</option>
-            <option value="openai/gpt-4o">GPT-4o (Premium)</option>
-            <option value="google/gemini-2.0-flash-001">Gemini 2.0 (Fast)</option>
-            <option value="deepseek/deepseek-chat">DeepSeek V3</option>
-            <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 (Groq)</option>
-          </select>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(
-            "h-8 rounded-none text-[10px] uppercase tracking-widest",
-            showContextPanel ? "bg-primary/10 text-primary" : "text-muted-foreground"
-          )}
-          onClick={() => setShowContextPanel(!showContextPanel)}
-        >
-          <Database className="mr-2 size-3.5" />
-          Context
-        </Button>
-
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground h-8 rounded-none text-[10px] uppercase tracking-widest border-l border-border/40 pl-4"
-            onClick={() => void handleClear()}
-          >
-            Clear
-          </Button>
-        )}
-      </div>
-    </div>
-
-      {/* ── Bug 6 fix: no-data-sources warning ─────────────────────────────── */ }
-  {
-    hasDataSources === false && (
-      <div className="border-border/40 bg-amber-500/5 flex items-center gap-3 border-b px-6 py-2.5">
-        <AlertTriangle className="size-3.5 shrink-0 text-amber-400" />
-        <p className="text-xs text-amber-400/80">
-          No data sources connected — responses draw from general knowledge
-          only.{" "}
-          <Link
-            href={`/dashboard/chatbot/${Id as string}`}
-            className="underline underline-offset-2"
-          >
-            Add a data source
-          </Link>
-        </p>
-      </div>
-    )
-  }
-  {/* ── Main Chat Area ── */ }
-  <div className="flex flex-1 overflow-hidden">
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* ── Chat history ────────────────────────────────────────────────────── */}
-      <div
-        ref={scrollRef}
-        className="bg-muted/5 flex-1 space-y-6 overflow-y-auto p-6 md:p-10"
-      >
-        <div className="mx-auto w-full max-w-3xl space-y-6">
-          {/* Empty state */}
-          {messages.length === 0 && !sending ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <BotIcon className="text-primary/40 mb-6 size-16" />
-              <h2 className="mb-2 text-xl font-bold tracking-tight uppercase">
-                Start a New Conversation
-              </h2>
-              <p className="text-muted-foreground mb-12 max-w-sm text-sm font-medium">
-                Ask {bot.name} anything about your connected data sources.
-              </p>
-
-              {/* Bug 3 fix: quick questions call sendMessage directly */}
-              <div className="grid w-full max-w-md gap-3">
-                {[
-                  "Tell me about the documents you've processed.",
-                  "What are the key takeaways from your data?",
-                  "Help me understand how you can assist me.",
-                ].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => handleQuickQuestion(q)}
-                    disabled={sending}
-                    className="border-border/60 bg-muted/20 hover:bg-primary/5 hover:border-primary/40 group flex items-center justify-between border px-6 py-4 text-left text-[11px] font-bold tracking-widest uppercase transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {q}
-                    <Send className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                  </button>
-                ))}
-              </div>
+      {/* ── Bug 6 fix: no-data-sources warning ─────────────────────────────── */}
+      {
+        hasDataSources === false && (
+          <div className="border-border/40 bg-amber-500/5 flex items-center gap-3 border-b px-6 py-2.5">
+            <AlertTriangle className="size-3.5 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-400/80">
+              No data sources connected — responses draw from general knowledge
+              only.{" "}
+              <Link
+                href={`/dashboard/chatbot/${Id as string}`}
+                className="underline underline-offset-2"
+              >
+                Add a data source
+              </Link>
+            </p>
+          </div>
+        )
+      }
+      {/* ── Main Chat Area ── */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden relative z-10">
+          {/* Immersive Floating Controls (Stay fixed above scroll) */}
+          <div className="absolute top-6 left-6 right-6 z-50 flex items-center justify-between pointer-events-none">
+            <div className="pointer-events-auto">
+              <Link href={`/dashboard/chatbot/${Id as string}`}>
+                <Button variant="outline" size="sm" className="bg-background/80 backdrop-blur-sm rounded-none border-border/40 h-8 text-[10px] uppercase tracking-widest">
+                  <ArrowLeft className="mr-2 size-3" />
+                  Back to Agent
+                </Button>
+              </Link>
             </div>
-          ) : (
-            /* Messages */
-            messages.map((msg) => {
-              // Improvement A: extract source_chunks count from assistant metadata
-              const metadata = (msg.metadata as Record<string, unknown>) ?? {};
-              const sourceCount = (metadata.source_chunks as number) ?? 0;
-              const sourceChunks = (metadata.chunks as string[]) ?? [];
-              const modelName = (metadata.model as string) ?? "";
-              const isCopied = copiedId === msg.id;
 
-              return (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "group flex gap-4",
-                    msg.role === "USER" ? "flex-row-reverse" : "flex-row"
-                  )}
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "bg-background/80 backdrop-blur-sm h-8 rounded-none text-[10px] uppercase tracking-widest border-border/40",
+                  showContextPanel ? "border-primary text-primary" : "text-muted-foreground"
+                )}
+                onClick={() => setShowContextPanel(!showContextPanel)}
+              >
+                <Database className="mr-2 size-3" />
+                Knowledge
+              </Button>
+              {messages.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-foreground h-8 rounded-none text-[10px] uppercase tracking-widest border-border/40"
+                  onClick={() => void handleClear()}
                 >
-                  {/* Avatar */}
-                  <div
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-none border",
-                      msg.role === "USER"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background",
-                      msg.failed && "border-red-400/50 bg-red-400/10"
-                    )}
-                  >
-                    {msg.role === "USER" ? (
-                      <UserIcon className="size-4" />
+                  Clear Session
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Chat history ────────────────────────────────────────────────────── */}
+          <div
+            ref={scrollRef}
+            className="relative z-10 flex-1 space-y-6 overflow-y-auto p-6 md:p-10 pt-24 pb-28"
+          >
+
+
+            <div className="relative z-10 mx-auto w-full max-w-3xl space-y-6">
+              {/* Empty state */}
+              {messages.length === 0 && !sending ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <BotIcon className="text-primary/40 mb-6 size-16" />
+                  <h2 className="mb-2 text-xl font-bold tracking-tight uppercase">
+                    Start a New Conversation
+                  </h2>
+                  <p className="text-muted-foreground mb-12 max-w-sm text-sm font-medium">
+                    Ask {bot.name} anything about your connected data sources.
+                  </p>
+
+                  {/* Bug 3 fix: quick questions call sendMessage directly */}
+                  <div className="grid w-full max-w-md gap-3">
+                    {questionsLoading ? (
+                      [1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-none" />)
                     ) : (
-                      <BotIcon className="size-4" />
-                    )}
-                  </div>
-
-                  {/* Bubble + meta row */}
-                  <div
-                    className={cn(
-                      "flex max-w-[85%] flex-col gap-1.5",
-                      msg.role === "USER" ? "items-end" : "items-start"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "border px-5 py-3 text-sm leading-relaxed",
-                        msg.role === "USER"
-                          ? "border-primary/20 bg-primary/5 text-foreground"
-                          : "border-border bg-background shadow-sm",
-                        msg.failed && "border-red-400/30 bg-red-400/5"
-                      )}
-                    >
-                      {msg.role === "USER" ? (
-                        <span className="whitespace-pre-wrap">{msg.content}</span>
-                      ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={MarkdownComponents}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                      )}
-                    </div>
-
-                    {/* Improvement A + C: citation chip + copy button row (assistant only) */}
-                    {msg.role === "ASSISTANT" && !msg.failed && (
-                      <div className="flex items-center gap-2">
-                        <CitationChip
-                          count={sourceCount}
-                          onClick={() => {
-                            setActiveContext(sourceChunks);
-                            setShowContextPanel(true);
-                          }}
-                        />
-
-                        {/* Improvement C: copy button */}
+                      (suggestedQuestions.length > 0 ? suggestedQuestions : [
+                        "Tell me about the documents you've processed.",
+                        "What are the key takeaways from your data?",
+                        "Help me understand how you can assist me.",
+                      ]).map((q) => (
                         <button
-                          onClick={() => copy(msg.id, msg.content)}
-                          title="Copy response"
-                          className={cn(
-                            "text-muted-foreground/40 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest transition-all",
-                            "opacity-0 group-hover:opacity-100",
-                            isCopied
-                              ? "text-emerald-400"
-                              : "hover:text-muted-foreground"
-                          )}
+                          key={q}
+                          onClick={() => handleQuickQuestion(q)}
+                          disabled={sending}
+                          className="border-border/60 bg-muted/20 hover:bg-primary/5 hover:border-primary/40 group flex items-center justify-between border px-6 py-4 text-left text-[11px] font-bold tracking-widest uppercase transition-all disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {isCopied ? (
-                            <>
-                              <Check className="size-3" />
-                              Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="size-3" />
-                              Copy
-                            </>
-                          )}
+                          <span className="truncate pr-4">{q}</span>
+                          <Send className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
                         </button>
-
-                        {/* Model indicator */}
-                        {modelName && (
-                          <span className="text-[9px] font-bold tracking-widest uppercase opacity-20 pointer-events-none ml-2">
-                            {modelName.split('/').pop()}
-                          </span>
-                        )}
-
-                        {/* Phase 3: HITL Feedback */}
-                        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleFeedback(msg.id, 1)}
-                            className={cn(
-                              "p-1 hover:bg-emerald-500/10 transition-colors",
-                              msg.feedback === 1 ? "text-emerald-500" : "text-muted-foreground/30"
-                            )}
-                          >
-                            <ThumbsUp className="size-3" />
-                          </button>
-                          <button
-                            onClick={() => handleFeedback(msg.id, -1)}
-                            className={cn(
-                              "p-1 hover:bg-red-500/10 transition-colors",
-                              msg.feedback === -1 ? "text-red-500" : "text-muted-foreground/30"
-                            )}
-                          >
-                            <ThumbsDown className="size-3" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Bug 2 fix: retry affordance on failed messages */}
-                    {msg.failed && (
-                      <button
-                        onClick={() => handleRetry(msg)}
-                        className="flex items-center gap-1 self-end text-[10px] font-semibold uppercase tracking-widest text-red-400/70 transition-colors hover:text-red-400"
-                      >
-                        <RotateCcw className="size-3" />
-                        Retry
-                      </button>
+                      ))
                     )}
                   </div>
                 </div>
-              );
-            })
-          )}
+              ) : (
+                /* Messages */
+                messages.map((msg) => {
+                  // Improvement A: extract source_chunks count from assistant metadata
+                  const metadata = (msg.metadata as Record<string, unknown>) ?? {};
+                  const sourceCount = (metadata.source_chunks as number) ?? 0;
+                  const sourceChunks = (metadata.chunks as string[]) ?? [];
+                  const isCopied = copiedId === msg.id;
 
-          {/* Typing indicator */}
-          {sending && <TypingIndicator />}
-        </div>
-      </div>
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        "group flex gap-4",
+                        msg.role === "USER" ? "flex-row-reverse" : "flex-row"
+                      )}
+                    >
+                      {/* Avatar */}
+                      <div
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-none border",
+                          msg.role === "USER"
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background",
+                          msg.failed && "border-red-400/50 bg-red-400/10"
+                        )}
+                      >
+                        {msg.role === "USER" ? (
+                          <UserIcon className="size-4" />
+                        ) : (
+                          <BotIcon className="size-4" />
+                        )}
+                      </div>
 
-      {/* ── Input bar ───────────────────────────────────────────────────────── */}
-      <div className="bg-background border-border/40 border-t p-4 md:p-6">
-        <form
-          onSubmit={(e) => void handleSend(e)}
-          className="mx-auto flex max-w-3xl flex-col gap-2"
-        >
-          <div className="flex items-end gap-3">
-            <textarea
-              ref={textareaRef}
-              placeholder="Ask anything… (Shift+Enter for newline)"
-              value={input}
-              onChange={(e) => {
-                if (e.target.value.length <= MAX_CHARS) {
-                  setInput(e.target.value);
-                  adjustHeight();
-                }
-              }}
-              onKeyDown={handleKeyDown}
-              disabled={sending}
-              rows={1}
-              className={cn(
-                "border-border/60 focus-visible:border-primary bg-muted/5 min-h-[48px] w-full flex-1 resize-none rounded-none border px-5 py-3 text-sm leading-relaxed focus:outline-none",
-                isOverLimit && "border-red-400/60"
+                      {/* Bubble + meta row */}
+                      <div
+                        className={cn(
+                          "flex max-w-[85%] flex-col gap-1.5",
+                          msg.role === "USER" ? "items-end" : "items-start"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "border px-5 py-3 text-sm leading-relaxed",
+                            msg.role === "USER"
+                              ? "border-primary/20 bg-primary/5 text-foreground"
+                              : "border-border bg-background shadow-sm",
+                            msg.failed && "border-red-400/30 bg-red-400/5"
+                          )}
+                        >
+                          {msg.role === "USER" ? (
+                            <span className="whitespace-pre-wrap">{msg.content}</span>
+                          ) : (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={MarkdownComponents}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          )}
+                        </div>
+
+                        {/* Improvement A + C: citation chip + copy button row (assistant only) */}
+                        {msg.role === "ASSISTANT" && !msg.failed && (
+                          <div className="flex items-center gap-2">
+                            <CitationChip
+                              count={sourceCount}
+                              onClick={() => {
+                                setActiveContext(sourceChunks);
+                                setShowContextPanel(true);
+                              }}
+                            />
+
+                            {/* Improvement C: copy button */}
+                            <button
+                              onClick={() => copy(msg.id, msg.content)}
+                              title="Copy response"
+                              className={cn(
+                                "text-muted-foreground/40 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest transition-all",
+                                isCopied
+                                  ? "text-emerald-400"
+                                  : "hover:text-muted-foreground"
+                              )}
+                            >
+                              {isCopied ? (
+                                <>
+                                  <Check className="size-3" />
+                                  Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="size-3" />
+                                  Copy
+                                </>
+                              )}
+                            </button>
+
+
+                            {/* Phase 3: HITL Feedback */}
+                            <div className="ml-auto flex items-center gap-1 transition-opacity">
+                              <button
+                                onClick={() => handleFeedback(msg.id, 1)}
+                                className={cn(
+                                  "p-1 hover:bg-emerald-500/10 transition-colors",
+                                  msg.feedback === 1 ? "text-emerald-500" : "text-muted-foreground/30"
+                                )}
+                              >
+                                <ThumbsUp className="size-3" />
+                              </button>
+                              <button
+                                onClick={() => handleFeedback(msg.id, -1)}
+                                className={cn(
+                                  "p-1 hover:bg-red-500/10 transition-colors",
+                                  msg.feedback === -1 ? "text-red-500" : "text-muted-foreground/30"
+                                )}
+                              >
+                                <ThumbsDown className="size-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Bug 2 fix: retry affordance on failed messages */}
+                        {msg.failed && (
+                          <button
+                            onClick={() => handleRetry(msg)}
+                            className="flex items-center gap-1 self-end text-[10px] font-semibold uppercase tracking-widest text-red-400/70 transition-colors hover:text-red-400"
+                          >
+                            <RotateCcw className="size-3" />
+                            Retry
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
-              style={{ maxHeight: "160px" }}
-            />
-            <Button
-              id="send-button"
-              type="submit"
-              disabled={sending || !input.trim() || isOverLimit}
-              className="shadow-primary/20 h-12 shrink-0 self-end rounded-none px-6 shadow-lg"
-            >
-              <Send className="mr-2 size-4" />
-              Send
-            </Button>
+
+              {/* Typing indicator */}
+              {sending && <TypingIndicator />}
+            </div>
           </div>
 
-          {showCounter && (
-            <span
+          {/* ── Floating Input bar ───────────────────────────────────────────────────────── */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 pb-8 pointer-events-none z-50 flex justify-center">
+            <form
+              onSubmit={(e) => void handleSend(e)}
               className={cn(
-                "self-end text-[10px] tabular-nums transition-colors",
-                charsLeft < 100 ? "text-red-400" : "text-muted-foreground/50"
+                "mx-auto transition-all duration-700 pointer-events-auto",
+                !isFocused && !input ? "w-12 h-12" : "w-full max-w-3xl"
               )}
+              style={{ transitionTimingFunction: "cubic-bezier(0.175, 0.885, 0.32, 1.275)" }}
             >
-              {charsLeft} chars remaining
-            </span>
-          )}
-        </form>
-      </div>
-    </div>
+              {!isFocused && !input ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFocused(true);
+                    setTimeout(() => textareaRef.current?.focus(), 100);
+                  }}
+                  className="w-12 h-12 flex items-center justify-center bg-primary text-primary-foreground shadow-2xl rounded-full hover:scale-110 active:scale-95 transition-all animate-in zoom-in spin-in-90 duration-500"
+                >
+                  <MessageSquare className="size-5" />
+                </button>
+              ) : (
+                <div className="relative flex items-center bg-background/80 backdrop-blur-2xl border border-border/40 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/5 transition-all p-1 shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500">
+                  <textarea
+                    ref={textareaRef}
+                    placeholder="Ask a question..."
+                    value={input}
+                    autoFocus
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => {
+                      if (!input) setIsFocused(false);
+                    }}
+                    onChange={(e) => {
+                      if (e.target.value.length <= MAX_CHARS) {
+                        setInput(e.target.value);
+                        adjustHeight();
+                      }
+                    }}
+                    onKeyDown={handleKeyDown}
+                    disabled={sending}
+                    rows={1}
+                    className="w-full flex-1 resize-none bg-transparent px-4 py-2 text-sm leading-relaxed focus:outline-none disabled:cursor-not-allowed"
+                    style={{ maxHeight: "160px" }}
+                  />
+                  <Button
+                    id="send-button"
+                    type="submit"
+                    disabled={sending || !input.trim() || isOverLimit}
+                    className="shadow-primary/10 h-9 w-9 shrink-0 rounded-none shadow-md transition-transform active:scale-95"
+                    size="icon"
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                </div>
+              )}
 
-    {/* Side Panel (Context) */}
-    {showContextPanel && (
-      <ContextPanel
-        chunks={activeContext}
-        onClose={() => setShowContextPanel(false)}
-        modelName={messages.filter(m => m.role === "ASSISTANT").pop()?.metadata?.model as string}
-      />
-    )}
-  </div>
+              {showCounter && isOverLimit && (
+                <div className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-red-400 bg-red-400/5 py-1">
+                  {charsLeft} CHARACTERS OVER LIMIT
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+
+        {/* Side Panel (Context) */}
+        {showContextPanel && (
+          <ContextPanel
+            chunks={activeContext}
+            onClose={() => setShowContextPanel(false)}
+          />
+        )}
+      </div>
     </div >
   );
 }

@@ -386,3 +386,14 @@ Return ONLY a raw JSON object — no markdown, no code fences, no extra text:
         logger.error(f"Insight Generation Error: {e}")
         return {"summary": "Analysis failed.", "sentiment": "Neutral"}
 
+async def generate_suggested_questions(context_snippets: List[str]) -> List[str]:
+    """Generates 3 relevant starter questions based on document context."""
+    snippets_text = "\n---\n".join(context_snippets[:5])
+    prompt = {
+        "system": "You are a helpful AI assistant. Based on the provided snippets from a knowledge base, generate exactly 3 short, engaging, and professional 'starter questions' that a user might want to ask this AI. Return ONLY the questions, one per line. No numbers, no extra text.",
+        "user": f"Document Snippets:\n{snippets_text}\n\nGenerate 3 questions:"
+    }
+    
+    response = await generate_llm_response(prompt)
+    questions = [q.strip() for q in response.split("\n") if q.strip()]
+    return questions[:3]
