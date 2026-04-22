@@ -39,25 +39,15 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { logoutSession, getProfile, getAvatarUrl } from "@/lib/api-session";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; avatar?: string } | null>(null);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const data = await getProfile();
-        setUser(data);
-      } catch (error) {
-        console.error("Failed to fetch user profile", error);
-      }
-    };
-    fetchUser();
-  }, []);
+  const { data: user } = useSWR("user-profile", getProfile);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);

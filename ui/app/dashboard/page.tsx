@@ -1,8 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/dashboard/chatbot");
+  }, [router]);
+
   return (
     <div className="bg-background mx-auto min-h-full w-full space-y-8 p-4 md:p-6 lg:p-8">
       {/* Header Skeleton */}

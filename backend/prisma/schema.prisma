@@ -83,6 +83,10 @@ model DocumentChunk {
     botId String @map("bot_id")
     bot   Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
 
+    // Recommended: Run the following SQL to enable Performant Keyword Search:
+    // CREATE INDEX document_chunks_content_idx ON document_chunks USING GIN (to_tsvector('english', content));
+    // CREATE INDEX document_chunks_bot_id_idx ON document_chunks (bot_id);
+
     @@map("document_chunks")
 }
 

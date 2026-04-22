@@ -197,9 +197,17 @@ async def list_all_owner_chats(
 
 @router.delete("/{chat_id}", status_code=204)
 async def delete_chat(chat_id: str, current_user=Depends(get_current_user)):
-    chat = await db.chat.find_unique(where={"id": chat_id})
-    if not chat or chat.userId != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    """Delete a chat. (Creator or Bot Owner only)"""
+    chat = await db.chat.find_unique(where={"id": chat_id}, include={"bot": True})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Permission: User is the creator OR User is the owner of the bot
+    is_creator = chat.userId == current_user.id
+    is_bot_owner = chat.bot.ownerId == current_user.id
+    
+    if not is_creator and not is_bot_owner:
+        raise HTTPException(status_code=403, detail="Unauthorized to delete this chat")
 
     await db.chat.delete(where={"id": chat_id})
     return None

@@ -7,6 +7,7 @@ import os
 import shutil
 from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from prisma import Json
 from app.core.database import db
@@ -248,3 +249,20 @@ async def delete_chunk(chunk_id: str, current_user=Depends(get_current_user)):
 
     await db.documentchunk.delete(where={"id": chunk_id})
     return None
+
+
+@router.get("/file/{ds_id}")
+async def get_datasource_file(ds_id: str, current_user=Depends(get_current_user)):
+    """Serve the original file for a datasource. (Owner only)"""
+    ds = await db.datasource.find_unique(where={"id": ds_id}, include={"bot": True})
+    if not ds or ds.bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to access this file")
+
+    if ds.type != "FILE" or not ds.fileUrl:
+        raise HTTPException(status_code=400, detail="This datasource does not have a file")
+
+    if not os.path.exists(ds.fileUrl):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Use original name for the download
+    return FileResponse(ds.fileUrl, filename=ds.name)

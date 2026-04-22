@@ -347,43 +347,36 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
 type FilterType = "all" | "internal" | "external";
 type SortKey = "updatedAt" | "createdAt" | "sentiment";
 
+import useSWR from "swr";
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChatLogsPage() {
-    const [chats, setChats] = useState<Chat[]>([]);
-    const [bots, setBots] = useState<Bot[]>([]);
-    const [loading, setLoading] = useState(true);
-
     const [search, setSearch] = useState("");
     const [filterType, setFilterType] = useState<FilterType>("all");
     const [sortKey, setSortKey] = useState<SortKey>("updatedAt");
 
+    const isExternalParam = filterType === "external" ? true : filterType === "internal" ? false : undefined;
+
+    const { data: chats = [], error: chatsError, mutate: mutateChats } = useSWR(
+        ["chats", filterType],
+        () => getAllOwnerChats(isExternalParam)
+    );
+    const { data: bots = [], error: botsError } = useSWR("all-bots", getBots);
+
+    const [loadingInitial, setLoadingInitial] = useState(true);
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    // ── Fetch ──────────────────────────────────────────────────────────────────
-    const fetchData = async (type: FilterType = filterType) => {
-        setLoading(true);
-        try {
-            const isExternalParam =
-                type === "external" ? true : type === "internal" ? false : undefined;
-            const [chatData, botData] = await Promise.all([
-                getAllOwnerChats(isExternalParam),
-                getBots(),
-            ]);
-            setChats(chatData);
-            setBots(botData);
-        } catch {
-            toast.error("Failed to load chat logs");
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        void fetchData(filterType);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterType]);
+        if ((chats.length > 0 || chatsError !== undefined) && (bots.length > 0 || botsError !== undefined)) {
+            setLoadingInitial(false);
+        }
+    }, [chats, chatsError, bots, botsError]);
+
+    const fetchData = async () => {
+        await mutateChats();
+    };
 
     // ── Bot name lookup ────────────────────────────────────────────────────────
     const botMap = useMemo(
@@ -455,7 +448,7 @@ export default function ChatLogsPage() {
         try {
             const ok = await deleteChat(chatId);
             if (ok) {
-                setChats((prev) => prev.filter((c) => c.id !== chatId));
+                await mutateChats();
                 if (selectedChatId === chatId) setSelectedChatId(null);
                 toast.success("Conversation deleted");
             } else {
@@ -469,7 +462,7 @@ export default function ChatLogsPage() {
     };
 
     // ─── Loading skeleton ───────────────────────────────────────────────────────
-    if (loading) {
+    if (loadingInitial && chats.length === 0) {
         return (
             <div className="min-h-full w-full space-y-8 p-4 md:p-6 lg:p-8">
                 <div className="space-y-2">
@@ -526,7 +519,7 @@ export default function ChatLogsPage() {
                         variant="outline"
                         size="sm"
                         className="rounded-none"
-                        onClick={() => void fetchData(filterType)}
+                        onClick={() => void fetchData()}
                     >
                         Refresh
                     </Button>

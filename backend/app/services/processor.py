@@ -211,12 +211,20 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
         results = await db.query_raw(raw_query, bot_id, query, top_k)
         return [r['content'] for r in results]
     except Exception as e:
-        # Fallback to simple contains if FTS fails (e.g. if extensions aren't ready)
-        logger.error(f"FTS Search failed: {e}. Falling back to simple contains.")
+        # Improved Fallback: Split query into words and search for chunks containing any of them
+        # (This is better than exact substring matching)
+        logger.error(f"FTS Search failed: {e}. Falling back to words-based search.")
+        search_terms = [t for t in query.split() if len(t) > 2]
+        if not search_terms:
+            search_terms = [query]
+
+        # We construct an OR query for the words
+        or_conditions = [{"content": {"contains": term, "mode": "insensitive"}} for term in search_terms]
+        
         chunks = await db.documentchunk.find_many(
             where={
                 "botId": bot_id,
-                "content": {"contains": query, "mode": "insensitive"}
+                "OR": or_conditions
             },
             take=top_k
         )

@@ -34,11 +34,20 @@ async def list_bots(
     skip: int = Query(0, ge=0),
     take: int = Query(20, ge=1, le=100),
     owner_id: str | None = Query(None, alias="ownerId"),
+    current_user=Depends(get_current_user),
 ):
-    """List bots, optionally filtered by owner."""
+    """List bots. (Protected: Defaults to current user's bots)"""
     where = {}
-    if owner_id:
-        where["ownerId"] = owner_id
+    
+    # Security: If no owner_id is requested, default to current_user
+    # If owner_id is requested, ensure requester has permission (for now, just allow their own)
+    target_owner = owner_id if owner_id else current_user.id
+    
+    if target_owner != current_user.id:
+        # For now, users can only list their own bots
+        raise HTTPException(status_code=403, detail="Not authorized to list bots for other users")
+        
+    where["ownerId"] = target_owner
 
     bots = await db.bot.find_many(
         where=where, skip=skip, take=take,
@@ -120,13 +129,11 @@ async def generate_bot_api_key(bot_id: str, current_user=Depends(get_current_use
     if not bot:
         raise HTTPException(status_code=404, detail="Bot not found")
 
-    # Only owner can generate key
+    # Only owner can generate/rotate key
     if bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to modify this bot")
 
-    if bot.apiKey:
-        raise HTTPException(status_code=400, detail="API Key already generated for this chatbot")
-
+    # Rotate or Generate
     new_key = str(uuid.uuid4())
     updated = await db.bot.update(
         where={"id": bot_id},
