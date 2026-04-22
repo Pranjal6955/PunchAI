@@ -167,7 +167,7 @@ Guidelines:
         return [query]
 
 
-async def generate_openrouter_response(prompt: str | dict) -> str:
+async def generate_openrouter_response(prompt: str | dict, model: str = None) -> str:
     """Calls OpenRouter asynchronously. Supports both raw strings and System/User dicts."""
     try:
         messages = []
@@ -180,7 +180,7 @@ async def generate_openrouter_response(prompt: str | dict) -> str:
             messages = [{"role": "user", "content": prompt}]
 
         response = await openrouter_client.chat.completions.create(
-            model=settings.OPENROUTER_MODEL,
+            model=model or settings.OPENROUTER_MODEL,
             messages=messages,
             extra_headers={
                 "HTTP-Referer": "https://punchai.app",
@@ -195,7 +195,7 @@ async def generate_openrouter_response(prompt: str | dict) -> str:
         raise e
 
 
-async def generate_groq_response(prompt: str | dict) -> str:
+async def generate_groq_response(prompt: str | dict, model: str = None) -> str:
     """Calls Groq asynchronously as a fallback. Supports System/User dicts."""
     try:
         messages = []
@@ -208,7 +208,7 @@ async def generate_groq_response(prompt: str | dict) -> str:
             messages = [{"role": "user", "content": prompt}]
 
         response = await groq_client.chat.completions.create(
-            model=settings.GROQ_MODEL,
+            model=model or settings.GROQ_MODEL,
             messages=messages,
         )
         if response.choices:
@@ -219,13 +219,13 @@ async def generate_groq_response(prompt: str | dict) -> str:
         return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}"
 
 
-async def generate_llm_response(prompt: str) -> str:
+async def generate_llm_response(prompt: str, model: str = None) -> str:
     """Main entry point with async fallback: OpenRouter -> Groq."""
     try:
-        return await generate_openrouter_response(prompt)
+        return await generate_openrouter_response(prompt, model=model)
     except Exception:
         logger.warning("Switching to Groq fallback...")
-        return await generate_groq_response(prompt)
+        return await generate_groq_response(prompt, model=model)
 
 
 async def generate_llm_stream(prompt: str | dict):

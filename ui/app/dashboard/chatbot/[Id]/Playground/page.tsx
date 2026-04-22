@@ -24,12 +24,20 @@ import {
   Copy,
   Check,
   FileText,
+  Settings2,
+  Database,
+  Sparkles,
+  Info,
+  X,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { submitFeedback } from "@/lib/api-session";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -122,13 +130,70 @@ function TypingIndicator() {
 
 // ─── Source citation chip ─────────────────────────────────────────────────────
 
-function CitationChip({ count }: { count: number }) {
+function CitationChip({ count, onClick }: { count: number, onClick?: () => void }) {
   if (count <= 0) return null;
   return (
-    <span className="border-border/50 text-muted-foreground/60 inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest">
+    <button
+      onClick={onClick}
+      className={cn(
+        "border-border/50 text-muted-foreground/60 inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest transition-colors",
+        onClick && "hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+      )}
+    >
       <FileText className="size-2.5" />
       {count} source{count !== 1 ? "s" : ""}
-    </span>
+    </button>
+  );
+}
+
+function ContextPanel({
+  chunks,
+  onClose,
+  modelName
+}: {
+  chunks: string[] | null,
+  onClose: () => void,
+  modelName?: string
+}) {
+  return (
+    <div className="border-border/40 bg-background flex h-full w-[350px] shrink-0 flex-col border-l">
+      <div className="border-border/40 flex h-12 items-center justify-between border-b px-4">
+        <div className="flex items-center gap-2">
+          <Database className="text-primary size-3.5" />
+          <span className="text-[10px] font-bold tracking-widest uppercase">Retrieved Context</span>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {modelName && (
+          <div className="bg-primary/5 border-primary/20 border p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="text-primary size-3" />
+              <span className="text-[9px] font-bold tracking-widest uppercase">AI Engine</span>
+            </div>
+            <p className="text-[11px] font-medium text-primary/80">{modelName}</p>
+          </div>
+        )}
+
+        {!chunks || chunks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center opacity-40">
+            <Info className="size-8 mb-2" />
+            <p className="text-[10px] font-bold tracking-widest uppercase">No context retrieved</p>
+          </div>
+        ) : (
+          chunks.map((chunk, i) => (
+            <div key={i} className="border-border/60 bg-muted/5 border p-3">
+              <div className="text-muted-foreground/50 mb-2 text-[9px] font-bold tracking-widest uppercase">
+                Chunk #{i + 1}
+              </div>
+              <p className="text-xs leading-relaxed text-foreground/80 whitespace-pre-wrap">{chunk}</p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -147,6 +212,11 @@ export default function PlaygroundPage() {
   const [sending, setSending] = React.useState(false);
   const [chatId, setChatId] = React.useState<string | null>(null);
   const [hasDataSources, setHasDataSources] = React.useState<boolean | null>(null);
+
+  // Pro Playground states (Phase 3)
+  const [selectedModel, setSelectedModel] = React.useState<string>("default");
+  const [activeContext, setActiveContext] = React.useState<string[] | null>(null);
+  const [showContextPanel, setShowContextPanel] = React.useState(false);
 
   // Improvement C: copy-to-clipboard
   const { copiedId, copy } = useCopyToClipboard();
@@ -257,7 +327,11 @@ export default function PlaygroundPage() {
       setSending(true);
 
       try {
-        const reply = await addMessage(chatId, trimmed);
+        const reply = await addMessage(
+          chatId,
+          trimmed,
+          selectedModel === "default" ? undefined : selectedModel
+        );
         if (reply) {
           // Bug 1 fix: keep user temp (content correct), append assistant reply
           setMessages((prev) => [...prev, reply as ExtendedMessage]);
@@ -324,6 +398,21 @@ export default function PlaygroundPage() {
     }
   };
 
+  const handleFeedback = async (msgId: string, feedback: number) => {
+    if (!chatId) return;
+    try {
+      const success = await submitFeedback(chatId, msgId, feedback);
+      if (success) {
+        setMessages((prev) =>
+          prev.map((m) => m.id === msgId ? { ...m, feedback } : m)
+        );
+        toast.success(feedback === 1 ? "Positive feedback recorded" : "Negative feedback recorded");
+      }
+    } catch {
+      toast.error("Failed to submit feedback");
+    }
+  };
+
   // ── Derived state ────────────────────────────────────────────────────────────
   const charsLeft = MAX_CHARS - input.length;
   const isOverLimit = charsLeft < 0;
@@ -355,46 +444,73 @@ export default function PlaygroundPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div className="flex items-center gap-3">
-            <div className="bg-primary/10 border-primary/20 flex size-8 items-center justify-center rounded-none border">
-              <BotIcon className="text-primary size-4" />
-            </div>
-            <span className="text-sm font-bold tracking-tight uppercase">
-              {bot.name}
-            </span>
-            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-          </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {/* Model Selector (Phase 3) */}
+        <div className="bg-muted/10 border-border/40 hidden items-center gap-2 border px-3 py-1.5 md:flex">
+          <Settings2 className="text-muted-foreground size-3.5" />
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="bg-transparent text-[10px] font-bold tracking-widest uppercase outline-none"
+          >
+            <option value="default py-1">Smart (Default)</option>
+            <option value="openai/gpt-4o">GPT-4o (Premium)</option>
+            <option value="google/gemini-2.0-flash-001">Gemini 2.0 (Fast)</option>
+            <option value="deepseek/deepseek-chat">DeepSeek V3</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 (Groq)</option>
+          </select>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-8 rounded-none text-[10px] uppercase tracking-widest",
+            showContextPanel ? "bg-primary/10 text-primary" : "text-muted-foreground"
+          )}
+          onClick={() => setShowContextPanel(!showContextPanel)}
+        >
+          <Database className="mr-2 size-3.5" />
+          Context
+        </Button>
 
         {messages.length > 0 && (
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground h-8 rounded-none text-[10px] uppercase tracking-widest"
+            className="text-muted-foreground hover:text-foreground h-8 rounded-none text-[10px] uppercase tracking-widest border-l border-border/40 pl-4"
             onClick={() => void handleClear()}
           >
             Clear
           </Button>
         )}
       </div>
+    </div>
 
-      {/* ── Bug 6 fix: no-data-sources warning ─────────────────────────────── */}
-      {hasDataSources === false && (
-        <div className="border-border/40 bg-amber-500/5 flex items-center gap-3 border-b px-6 py-2.5">
-          <AlertTriangle className="size-3.5 shrink-0 text-amber-400" />
-          <p className="text-xs text-amber-400/80">
-            No data sources connected — responses draw from general knowledge
-            only.{" "}
-            <Link
-              href={`/dashboard/chatbot/${Id as string}`}
-              className="underline underline-offset-2"
-            >
-              Add a data source
-            </Link>
-          </p>
-        </div>
-      )}
-
+      {/* ── Bug 6 fix: no-data-sources warning ─────────────────────────────── */ }
+  {
+    hasDataSources === false && (
+      <div className="border-border/40 bg-amber-500/5 flex items-center gap-3 border-b px-6 py-2.5">
+        <AlertTriangle className="size-3.5 shrink-0 text-amber-400" />
+        <p className="text-xs text-amber-400/80">
+          No data sources connected — responses draw from general knowledge
+          only.{" "}
+          <Link
+            href={`/dashboard/chatbot/${Id as string}`}
+            className="underline underline-offset-2"
+          >
+            Add a data source
+          </Link>
+        </p>
+      </div>
+    )
+  }
+  {/* ── Main Chat Area ── */ }
+  <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-hidden">
       {/* ── Chat history ────────────────────────────────────────────────────── */}
       <div
         ref={scrollRef}
@@ -435,10 +551,10 @@ export default function PlaygroundPage() {
             /* Messages */
             messages.map((msg) => {
               // Improvement A: extract source_chunks count from assistant metadata
-              const sourceCount =
-                msg.role === "ASSISTANT"
-                  ? ((msg.metadata as Record<string, unknown>)?.source_chunks as number) ?? 0
-                  : 0;
+              const metadata = (msg.metadata as Record<string, unknown>) ?? {};
+              const sourceCount = (metadata.source_chunks as number) ?? 0;
+              const sourceChunks = (metadata.chunks as string[]) ?? [];
+              const modelName = (metadata.model as string) ?? "";
               const isCopied = copiedId === msg.id;
 
               return (
@@ -497,7 +613,13 @@ export default function PlaygroundPage() {
                     {/* Improvement A + C: citation chip + copy button row (assistant only) */}
                     {msg.role === "ASSISTANT" && !msg.failed && (
                       <div className="flex items-center gap-2">
-                        <CitationChip count={sourceCount} />
+                        <CitationChip
+                          count={sourceCount}
+                          onClick={() => {
+                            setActiveContext(sourceChunks);
+                            setShowContextPanel(true);
+                          }}
+                        />
 
                         {/* Improvement C: copy button */}
                         <button
@@ -523,6 +645,35 @@ export default function PlaygroundPage() {
                             </>
                           )}
                         </button>
+
+                        {/* Model indicator */}
+                        {modelName && (
+                          <span className="text-[9px] font-bold tracking-widest uppercase opacity-20 pointer-events-none ml-2">
+                            {modelName.split('/').pop()}
+                          </span>
+                        )}
+
+                        {/* Phase 3: HITL Feedback */}
+                        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleFeedback(msg.id, 1)}
+                            className={cn(
+                              "p-1 hover:bg-emerald-500/10 transition-colors",
+                              msg.feedback === 1 ? "text-emerald-500" : "text-muted-foreground/30"
+                            )}
+                          >
+                            <ThumbsUp className="size-3" />
+                          </button>
+                          <button
+                            onClick={() => handleFeedback(msg.id, -1)}
+                            className={cn(
+                              "p-1 hover:bg-red-500/10 transition-colors",
+                              msg.feedback === -1 ? "text-red-500" : "text-muted-foreground/30"
+                            )}
+                          >
+                            <ThumbsDown className="size-3" />
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -548,7 +699,6 @@ export default function PlaygroundPage() {
       </div>
 
       {/* ── Input bar ───────────────────────────────────────────────────────── */}
-      {/* Bug 9: textarea + Shift+Enter  |  Bug 10: character limit */}
       <div className="bg-background border-border/40 border-t p-4 md:p-6">
         <form
           onSubmit={(e) => void handleSend(e)}
@@ -560,7 +710,6 @@ export default function PlaygroundPage() {
               placeholder="Ask anything… (Shift+Enter for newline)"
               value={input}
               onChange={(e) => {
-                // Bug 10: hard-block beyond MAX_CHARS
                 if (e.target.value.length <= MAX_CHARS) {
                   setInput(e.target.value);
                   adjustHeight();
@@ -586,7 +735,6 @@ export default function PlaygroundPage() {
             </Button>
           </div>
 
-          {/* Character counter — only visible when > 70% full */}
           {showCounter && (
             <span
               className={cn(
@@ -600,5 +748,16 @@ export default function PlaygroundPage() {
         </form>
       </div>
     </div>
+
+    {/* Side Panel (Context) */}
+    {showContextPanel && (
+      <ContextPanel
+        chunks={activeContext}
+        onClose={() => setShowContextPanel(false)}
+        modelName={messages.filter(m => m.role === "ASSISTANT").pop()?.metadata?.model as string}
+      />
+    )}
+  </div>
+    </div >
   );
 }

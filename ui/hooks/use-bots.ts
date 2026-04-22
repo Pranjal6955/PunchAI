@@ -3,7 +3,7 @@ import { getBots, deleteBot } from "@/lib/api-session";
 import { toast } from "sonner";
 
 export function useBots() {
-    const { data: bots = [], error, mutate, isLoading } = useSWR("all-bots", getBots);
+    const { data: bots = [], error, mutate, isLoading } = useSWR("bots-list", () => getBots());
 
     const removeBot = async (botId: string) => {
         try {

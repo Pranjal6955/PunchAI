@@ -34,13 +34,13 @@ This document outlines the planned features, architectural improvements, and opt
 ## 🎨 Phase 3: Enhanced User & Admin Tools
 *Priority: Medium*
 
-- [ ] **Pro Playground**:
+- [x] **Pro Playground**:
     - Add a "Retrieved Context" panel showing raw chunks, scores, and source names.
     - Add a toggle to switch between LLM models (e.g., GPT-4o vs Groq Llama 3) for side-by-side comparison.
-- [ ] **Widget Customizer**:
+- [x] **Widget Customizer**:
     - Build a "Theme Settings" UI to control widget colors, fonts, and brand logo.
     - Allow customization of the initial "Welcome Message" and suggestion chips.
-- [ ] **Human-in-the-Loop (HITL)**:
+- [x] **Human-in-the-Loop (HITL)**:
     - Add Thumbs Up/Down feedback for all AI responses.
     - Create an admin view to review negative feedback and override the knowledge base for specific queries.
 

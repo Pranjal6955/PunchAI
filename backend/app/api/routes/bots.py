@@ -165,3 +165,19 @@ async def get_bot_conversations(
         order={"updatedAt": "desc"}
     )
     return {"data": chats, "total": len(chats)}
+
+@router.get("/{bot_id}/feedback-messages")
+async def get_negative_feedback_messages(bot_id: str, current_user=Depends(get_current_user)):
+    """Retrieve all messages with negative feedback for this bot."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot or bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    messages = await db.message.find_many(
+        where={
+            "chat": {"botId": bot_id},
+            "feedback": -1
+        },
+        order={"createdAt": "desc"}
+    )
+    return messages

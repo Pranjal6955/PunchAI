@@ -30,6 +30,9 @@ import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { IntegrationTab } from "@/components/chatbot/IntegrationTab";
+import { WidgetCustomizer } from "@/components/chatbot/WidgetCustomizer";
+import { FeedbackReview } from "@/components/chatbot/FeedbackReview";
 import {
   ChevronRight,
   Database,
@@ -41,6 +44,8 @@ import {
   Plus,
   CheckCircle2,
   Trash2,
+  Layout,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Select,
@@ -49,7 +54,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { IntegrationTab } from "@/components/chatbot/IntegrationTab";
 
 export default function AgentDashboard() {
   const { Id } = useParams();
@@ -244,6 +248,20 @@ export default function AgentDashboard() {
             >
               {dataSources.length === 0 && <ShieldCheck className="h-3.5 w-3.5 opacity-70" />}
               Integration
+            </TabsTrigger>
+            <TabsTrigger
+              value="widget"
+              className="data-[state=active]:bg-background flex h-10 items-center gap-2 rounded-none px-8 data-[state=active]:shadow-sm"
+            >
+              <Layout className="h-3.5 w-3.5" />
+              Widget
+            </TabsTrigger>
+            <TabsTrigger
+              value="review"
+              className="data-[state=active]:bg-background flex h-10 items-center gap-2 rounded-none px-8 data-[state=active]:shadow-sm"
+            >
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              Review (HITL)
             </TabsTrigger>
           </TabsList>
 
@@ -442,6 +460,14 @@ export default function AgentDashboard() {
               handleGenerateApiKey={handleGenerateApiKey}
               defaultCss={DEFAULT_CSS}
             />
+          </TabsContent>
+
+          <TabsContent value="widget" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">
+            <WidgetCustomizer bot={bot} onUpdate={(updatedBot) => setBot(updatedBot)} />
+          </TabsContent>
+
+          <TabsContent value="review" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">
+            <FeedbackReview botId={bot.id} />
           </TabsContent>
         </Tabs>
       </main>

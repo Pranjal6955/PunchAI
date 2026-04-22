@@ -22,6 +22,9 @@ class BotUpdate(BaseModel):
     description: Optional[str] = None
     botPersona: Optional[str] = None
     customCss: Optional[str] = None
+    welcomeMessage: Optional[str] = None
+    suggestionChips: Optional[str] = None
+    themeColor: Optional[str] = None
 
 
 # ── Response Schemas ──
@@ -33,6 +36,9 @@ class BotResponse(BaseModel):
     botPersona: Optional[str] = None
     apiKey: Optional[str] = None
     customCss: Optional[str] = None
+    welcomeMessage: Optional[str] = None
+    suggestionChips: Optional[str] = None
+    themeColor: Optional[str] = None
     ownerId: str
     dataSourceCount: Optional[int] = 0
     createdAt: datetime

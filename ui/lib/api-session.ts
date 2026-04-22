@@ -211,6 +211,9 @@ export interface Bot {
   botPersona: string;
   apiKey?: string;
   customCss?: string;
+  welcomeMessage?: string;
+  suggestionChips?: string;
+  themeColor?: string;
   ownerId: string;
   createdAt: string;
   updatedAt: string;
@@ -274,6 +277,21 @@ export const deleteBot = async (botId: string): Promise<boolean> => {
   return res.ok;
 };
 
+export const getNegativeFeedbackMessages = async (botId: string): Promise<Message[]> => {
+  const res = await authorizedFetch(`/api/bots/${botId}/feedback-messages`);
+  if (!res.ok) return [];
+  return (await parseJsonSafely<Message[]>(res)) || [];
+};
+
+export const createFaq = async (botId: string, question: string, answer: string): Promise<any> => {
+  const res = await authorizedFetch(`/api/data-sources/faq`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ botId, items: [{ question, answer }], name: `Override: ${question.slice(0, 20)}...` }),
+  });
+  return res.ok;
+};
+
 export const generateBotApiKey = async (botId: string): Promise<Bot | null> => {
   const res = await authorizedFetch(`/api/bots/${botId}/api-key`, {
     method: "POST",
@@ -286,10 +304,12 @@ export const generateBotApiKey = async (botId: string): Promise<Bot | null> => {
 
 export interface Message {
   id: string;
-  role: "USER" | "ASSISTANT";
+  role: "USER" | "ASSISTANT" | "SYSTEM";
   content: string;
-  createdAt: string;
   metadata?: Record<string, unknown>;
+  feedback?: number;
+  chatId: string;
+  createdAt: string;
 }
 
 export interface Chat {
@@ -366,16 +386,23 @@ export const createChat = async (data: {
   return await parseJsonSafely<Chat>(res);
 };
 
-export const addMessage = async (chatId: string, content: string): Promise<Message | null> => {
+export const addMessage = async (chatId: string, content: string, model?: string): Promise<Message | null> => {
   const res = await authorizedFetch(`/api/chats/${chatId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, model }),
   });
   if (!res.ok) return null;
   return await parseJsonSafely<Message>(res);
+};
+
+export const submitFeedback = async (chatId: string, messageId: string, feedback: number): Promise<boolean> => {
+  const res = await authorizedFetch(`/api/chats/${chatId}/messages/${messageId}/feedback?feedback=${feedback}`, {
+    method: "PATCH",
+  });
+  return res.ok;
 };
 
 export const deleteChat = async (chatId: string): Promise<boolean> => {

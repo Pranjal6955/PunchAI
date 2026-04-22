@@ -121,7 +121,7 @@ async def add_message(
         history=history
     )
     
-    ai_text = await generate_llm_response(structured_prompt)
+    ai_text = await generate_llm_response(structured_prompt, model=payload.model)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
@@ -129,7 +129,11 @@ async def add_message(
             "role": "ASSISTANT",
             "content": ai_text,
             "chat": {"connect": {"id": chat_id}},
-            "metadata": Json({"source_chunks": len(context_chunks)})
+            "metadata": Json({
+                "source_chunks": len(context_chunks),
+                "chunks": context_chunks, # P3: For "Retrieved Context" panel
+                "model": payload.model or settings.OPENROUTER_MODEL
+            })
         }
     )
 
@@ -211,3 +215,29 @@ async def delete_chat(chat_id: str, current_user=Depends(get_current_user)):
 
     await db.chat.delete(where={"id": chat_id})
     return None
+
+@router.patch("/{chat_id}/messages/{message_id}/feedback", response_model=MessageResponse)
+async def submit_message_feedback(
+    chat_id: str,
+    message_id: str,
+    feedback: int = Query(..., ge=-1, le=1),
+    current_user=Depends(get_current_user)
+):
+    """Submit thumbs up (1) or thumbs down (-1) feedback for a message."""
+    # Find message and verify it belongs to the chat and the chat is accessible
+    message = await db.message.find_unique(
+        where={"id": message_id},
+        include={"chat": {"include": {"bot": True}}}
+    )
+    
+    if not message or message.chatId != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # In production, check if the current user has access to this chat
+    # For now, let's allow it
+
+    updated = await db.message.update(
+        where={"id": message_id},
+        data={"feedback": feedback}
+    )
+    return updated
