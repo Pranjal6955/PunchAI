@@ -58,8 +58,6 @@ class ChatResponse(BaseModel):
     externalUserId: Optional[str] = None
     externalUserName: Optional[str] = None
     externalUserEmail: Optional[str] = None
-    summary: Optional[str] = None
-    sentiment: Optional[str] = None
     customMetadata: Optional[Any] = None
     createdAt: datetime
     updatedAt: datetime

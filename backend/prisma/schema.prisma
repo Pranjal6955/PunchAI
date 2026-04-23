@@ -135,9 +135,6 @@ model Chat {
     externalUserName  String? @map("external_user_name")
     externalUserEmail String? @map("external_user_email")
 
-    // --- NEW: AI Insights & Analytics ---
-    summary        String? @db.Text
-    sentiment      String? // e.g., "Happy", "Neutral", "Frustrated"
     customMetadata Json?   @map("custom_metadata")
 
     @@map("chats")
@@ -151,6 +148,7 @@ model Message {
     metadata  Json?
     feedback  Int? // 1 for Thumbs Up, -1 for Thumbs Down
     createdAt DateTime    @default(now()) @map("created_at")
+
 
     chatId String @map("chat_id")
     chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)

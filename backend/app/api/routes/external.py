@@ -137,7 +137,8 @@ async def add_external_message(
     )
     search_query = await get_search_query(payload.content, refinement_history)
     
-    context_chunks = await hybrid_retrieve(bot_id=bot.id, query=search_query, top_k=5)
+    retrieval = await hybrid_retrieve(bot_id=bot.id, query=search_query, top_k=5)
+    context_chunks = retrieval["chunks"]
     await db.message.update(
         where={"id": user_msg.id}, 
         data={"metadata": Json({"chunks": context_chunks, "refined_query": search_query})}
@@ -158,7 +159,7 @@ async def add_external_message(
         history=history
     )
     
-    ai_text = await generate_llm_response(prompt)
+    ai_text, usage = await generate_llm_response(prompt)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
@@ -166,6 +167,11 @@ async def add_external_message(
             "role": "ASSISTANT",
             "content": ai_text,
             "chat": {"connect": {"id": chat_id}},
+            "promptTokens": usage["prompt_tokens"],
+            "completionTokens": usage["completion_tokens"],
+            "totalTokens": usage["total_tokens"],
+            "topScore": retrieval["top_score"],
+            "isKnowledgeGap": retrieval["is_knowledge_gap"],
             "metadata": Json({"source_chunks": len(context_chunks)})
         }
     )
@@ -216,7 +222,8 @@ async def add_external_message_stream(
     )
     search_query = await get_search_query(payload.content, refinement_history)
     
-    context_chunks = await hybrid_retrieve(bot_id=bot.id, query=search_query, top_k=5)
+    retrieval = await hybrid_retrieve(bot_id=bot.id, query=search_query, top_k=5)
+    context_chunks = retrieval["chunks"]
     await db.message.update(
         where={"id": user_msg.id}, 
         data={"metadata": Json({"chunks": context_chunks, "refined_query": search_query})}
@@ -258,6 +265,8 @@ async def add_external_message_stream(
                             "role": "ASSISTANT",
                             "content": full_text,
                             "chat": {"connect": {"id": chat_id}},
+                            "topScore": retrieval["top_score"],
+                            "isKnowledgeGap": retrieval["is_knowledge_gap"],
                             "metadata": Json({
                                 "source_chunks": len(context_chunks), 
                                 "streamed": True,

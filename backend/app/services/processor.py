@@ -54,7 +54,7 @@ Return them as a comma-separated list. Return ONLY the names.
 Text: {text[:1000]}
 Entities:"""
     try:
-        res = await generate_groq_response(prompt)
+        res, _ = await generate_groq_response(prompt)
         # Take the last line in case of preamble
         last_line = res.strip().split('\n')[-1]
         return [e.strip() for e in last_line.split(',') if e.strip()][:5]
@@ -244,10 +244,11 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
         return []
 
 
-async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool = True) -> List[str]:
+async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool = True) -> Dict[str, Any]:
     """
     Combines Semantic Search and Keyword Search (Hybrid Search) with Re-ranking.
     Now with P2 Query Expansion (Multihop Retrieval).
+    Returns: { "chunks": List[str], "top_score": float, "is_knowledge_gap": bool }
     """
     # 1. Query Expansion (if enabled)
     from app.services.llm import generate_expanded_queries
@@ -275,7 +276,11 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
                 seen.add(chunk)
     
     if not all_candidates:
-        return []
+        return {
+            "chunks": [],
+            "top_score": 0.0,
+            "is_knowledge_gap": True
+        }
 
     # 3. Re-ranking: Score ALL candidates against the ORIGINAL query
     # This ensures accuracy even if expanded queries were a bit off
@@ -287,5 +292,14 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
     # Combine and sort by score (descending)
     scored_candidates = sorted(zip(all_candidates, scores), key=lambda x: x[1], reverse=True)
     
-    # Return top_k
-    return [c for c, s in scored_candidates[:top_k]]
+    top_score = float(scored_candidates[0][1]) if scored_candidates else 0.0
+    
+    # Knowledge Gap threshold: if top score is very low (e.g. < -5 for ms-marco), mark as gap
+    # ms-marco-MiniLM-L-6-v2 scores are logits, usually -10 to 10.
+    is_knowledge_gap = top_score < -2.0 
+
+    return {
+        "chunks": [c for c, s in scored_candidates[:top_k]],
+        "top_score": top_score,
+        "is_knowledge_gap": is_knowledge_gap
+    }

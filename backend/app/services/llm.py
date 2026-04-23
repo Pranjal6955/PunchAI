@@ -114,7 +114,7 @@ User: {question}
 """
     try:
         # P1 Enhancement: Use Groq for faster query refinement (0.5s vs 1.8s)
-        refined = await generate_groq_response(query_refiner_prompt)
+        refined, _ = await generate_groq_response(query_refiner_prompt)
         
         # Take the most likely line and strip prefixes
         lines = [l.strip() for l in refined.split('\n') if l.strip()]
@@ -151,7 +151,7 @@ Guidelines:
     try:
         # Use Groq for speed
         from app.services.llm import generate_groq_response
-        response = await generate_groq_response(prompt)
+        response, _ = await generate_groq_response(prompt)
         queries = [l.strip() for l in response.split('\n') if l.strip()]
         
         cleaned_queries = [query] # Always start with original
@@ -167,7 +167,7 @@ Guidelines:
         return [query]
 
 
-async def generate_openrouter_response(prompt: str | dict, model: str = None) -> str:
+async def generate_openrouter_response(prompt: str | dict, model: str = None) -> tuple[str, dict]:
     """Calls OpenRouter asynchronously. Supports both raw strings and System/User dicts."""
     try:
         messages = []
@@ -187,15 +187,20 @@ async def generate_openrouter_response(prompt: str | dict, model: str = None) ->
                 "X-Title": "PunchAI",
             }
         )
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "total_tokens": response.usage.total_tokens if response.usage else 0
+        }
         if response.choices:
-            return response.choices[0].message.content
+            return response.choices[0].message.content, usage
         raise Exception("OpenRouter returned no response choices.")
     except Exception as e:
         logger.error(f"OpenRouter Error: {e}")
         raise e
 
 
-async def generate_groq_response(prompt: str | dict, model: str = None) -> str:
+async def generate_groq_response(prompt: str | dict, model: str = None) -> tuple[str, dict]:
     """Calls Groq asynchronously as a fallback. Supports System/User dicts."""
     try:
         messages = []
@@ -211,15 +216,20 @@ async def generate_groq_response(prompt: str | dict, model: str = None) -> str:
             model=model or settings.GROQ_MODEL,
             messages=messages,
         )
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "total_tokens": response.usage.total_tokens if response.usage else 0
+        }
         if response.choices:
-            return response.choices[0].message.content
-        return "Groq returned no response choices."
+            return response.choices[0].message.content, usage
+        return "Groq returned no response choices.", usage
     except Exception as e:
         logger.error(f"Groq Error: {e}")
-        return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}"
+        return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-async def generate_llm_response(prompt: str, model: str = None) -> str:
+async def generate_llm_response(prompt: str, model: str = None) -> tuple[str, dict]:
     """Main entry point with async fallback: OpenRouter -> Groq."""
     try:
         return await generate_openrouter_response(prompt, model=model)
@@ -273,118 +283,6 @@ async def generate_llm_stream(prompt: str | dict):
             yield f"Error: {str(e2)}"
 
 
-async def generate_conversation_insights(history: List[dict]) -> dict:
-    """
-    Analytics & Sentiment Analysis.
-    Uses LLM to summarize the conversation and detect sentiment.
-
-    Returns a dict with:
-      - summary: str   — one-sentence conversation summary
-      - sentiment: str — one of Happy | Neutral | Frustrated | Curious
-    """
-    if not history:
-        return {"summary": "No history to summarize.", "sentiment": "Neutral"}
-
-    history_text = ""
-    for msg in history:
-        if isinstance(msg, dict):
-            role = msg.get('role', 'USER')
-            content = msg.get('content', '')
-        else:
-            role = getattr(msg, 'role', 'USER')
-            content = getattr(msg, 'content', '')
-        history_text += f"{role}: {content}\n"
-
-    prompt = f"""### TASK
-Analyze the conversation history below and return a JSON object.
-
-You MUST:
-1. Write a one-sentence **summary** that captures the main topic and outcome.
-2. Classify the overall **user sentiment** using EXACTLY one of these values (case-sensitive):
-   - Happy      → user is satisfied, pleased, or grateful
-   - Neutral    → user is informational, balanced, or has no strong emotion
-   - Frustrated → user is upset, annoyed, or dissatisfied
-   - Curious    → user is exploring, asking many questions, or fact-finding
-
-### CONVERSATION HISTORY
-{history_text}
-
-### RESPONSE FORMAT
-Return ONLY a raw JSON object — no markdown, no code fences, no extra text:
-{{"summary": "...", "sentiment": "Happy|Neutral|Frustrated|Curious"}}
-"""
-
-    # Canonical set
-    VALID_SENTIMENTS = {"Happy", "Neutral", "Frustrated", "Curious"}
-
-    # Synonym map — normalises unexpected LLM outputs to our canonical labels
-    SYNONYM_MAP = {
-        "happy": "Happy",
-        "positive": "Happy",
-        "satisfied": "Happy",
-        "grateful": "Happy",
-        "pleased": "Happy",
-        "good": "Happy",
-        "great": "Happy",
-        "frustrated": "Frustrated",
-        "negative": "Frustrated",
-        "upset": "Frustrated",
-        "angry": "Frustrated",
-        "annoyed": "Frustrated",
-        "bad": "Frustrated",
-        "dissatisfied": "Frustrated",
-        "neutral": "Neutral",
-        "informational": "Neutral",
-        "mixed": "Neutral",
-        "balanced": "Neutral",
-        "curious": "Curious",
-        "inquisitive": "Curious",
-        "exploring": "Curious",
-        "interested": "Curious",
-    }
-
-    try:
-        # P1 Enhancement: Use Groq for faster background analysis
-        raw_response = await generate_groq_response(prompt)
-
-        import json, re
-
-        # Strip markdown code fences if the LLM wrapped the JSON
-        cleaned = re.sub(r"```(?:json)?\s*", "", raw_response).strip().strip("`")
-
-        # Extract the first JSON object
-        match = re.search(r'\{.*?\}', cleaned, re.DOTALL)
-        if not match:
-            logger.warning(f"No JSON found in insight response: {raw_response[:200]}")
-            return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
-
-        parsed = json.loads(match.group())
-        summary = parsed.get("summary", "").strip() or "Summary unavailable."
-
-        # Normalise sentiment — strip punctuation, then title-case match
-        raw_sentiment = str(parsed.get("sentiment", "")).strip().rstrip(".,;!")
-        raw_lower = raw_sentiment.lower()
-
-        # Check exact match first (e.g. "Happy"), then synonym lookup
-        matched = next((v for v in VALID_SENTIMENTS if v.lower() == raw_lower), None)
-        if matched:
-            sentiment = matched
-        else:
-            sentiment = SYNONYM_MAP.get(raw_lower, "Neutral")
-            if sentiment == "Neutral" and raw_lower not in SYNONYM_MAP:
-                logger.warning(
-                    f"Unknown sentiment '{raw_sentiment}' — defaulting to Neutral"
-                )
-
-        logger.info(f"Sentiment resolved: '{raw_sentiment}' → '{sentiment}'")
-        return {"summary": summary, "sentiment": sentiment}
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error in insight generation: {e} | raw: {raw_response[:300]}")
-        return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
-    except Exception as e:
-        logger.error(f"Insight Generation Error: {e}")
-        return {"summary": "Analysis failed.", "sentiment": "Neutral"}
 
 async def generate_suggested_questions(context_snippets: List[str]) -> List[str]:
     """Generates 3 relevant starter questions based on document context."""
@@ -394,6 +292,6 @@ async def generate_suggested_questions(context_snippets: List[str]) -> List[str]
         "user": f"Document Snippets:\n{snippets_text}\n\nGenerate 3 questions:"
     }
     
-    response = await generate_llm_response(prompt)
+    response, _ = await generate_llm_response(prompt)
     questions = [q.strip() for q in response.split("\n") if q.strip()]
     return questions[:3]
