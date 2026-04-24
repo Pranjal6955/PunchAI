@@ -111,24 +111,30 @@ async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_use
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
+    normalized_url = payload.url
     ds = await db.datasource.create(
         data={
-            "name": str(payload.url), "type": "URL", "status": "PROCESSING",
+            "name": normalized_url, "type": "URL", "status": "PROCESSING",
             "bot": {"connect": {"id": payload.botId}},
         }
     )
 
-    # 1. Specialized URL Extraction & Cleaning (filters nav/footer/ads)
-    content = await extract_text_from_url(str(payload.url))
-    if content:
-        # process_and_store now handles both splitting into granular chunks 
-        # and saving them to both ChromaDB and Postgres SQL.
-        await process_and_store(
-            bot_id=payload.botId, source_id=ds.id, raw_text=content, 
-            metadata={"url": str(payload.url), "type": "URL"}
-        )
-        await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
-    else:
+    try:
+        # 1. Specialized URL Extraction & Cleaning (filters nav/footer/ads)
+        content = await extract_text_from_url(normalized_url)
+        if content:
+            # process_and_store now handles both splitting into granular chunks 
+            # and saving them to both ChromaDB and Postgres SQL.
+            await process_and_store(
+                bot_id=payload.botId, source_id=ds.id, raw_text=content, 
+                metadata={"url": normalized_url, "type": "URL"}
+            )
+            await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
+        else:
+            logger.warning(f"No content extracted for URL datasource: {normalized_url}")
+            await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
+    except Exception as e:
+        logger.error(f"Error processing URL datasource {normalized_url}: {e}")
         await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
 
     return ds

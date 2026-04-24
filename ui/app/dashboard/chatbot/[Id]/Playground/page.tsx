@@ -264,10 +264,17 @@ export default function PlaygroundPage() {
 
         if (hasDS) {
           setQuestionsLoading(true);
-          getSuggestedQuestions(Id as string).then(qs => {
-            setSuggestedQuestions(qs);
-            setQuestionsLoading(false);
-          });
+          getSuggestedQuestions(Id as string)
+            .then((qs) => {
+              setSuggestedQuestions(qs);
+            })
+            .catch(() => {
+              setSuggestedQuestions([]);
+              toast.error("Failed to load suggested questions");
+            })
+            .finally(() => {
+              setQuestionsLoading(false);
+            });
         }
 
         // Bug 8 fix: reuse existing session stored in sessionStorage

@@ -9,13 +9,7 @@ import { PageSkeleton } from "@/components/dashboard/page-skeleton";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(() => {
-    // Initial check to avoid flickering if token exists
-    if (typeof window !== "undefined" && localStorage.getItem("authToken")) {
-      return false;
-    }
-    return true;
-  });
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
     const ensureSession = async () => {

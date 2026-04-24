@@ -34,12 +34,18 @@ def clean_url_text(soup: BeautifulSoup) -> str:
     for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe"]):
         element.decompose()
         
-    # 2. Extract text from primary containers if they exist (common tags for actual content)
-    main_content = soup.find(['main', 'article', 'div[id*="content"]', 'div[class*="content"]'])
+    # 2. Extract text from primary containers if they exist (common selectors for actual content)
+    main_content = soup.select_one(
+        "main, article, [role='main'], #content, .content, .post-content, .entry-content"
+    )
     if main_content:
         text = main_content.get_text(separator="\n")
     else:
-        text = soup.get_text(separator="\n")
+        fallback_nodes = soup.select("h1, h2, h3, p, li")
+        if fallback_nodes:
+            text = "\n".join(node.get_text(" ", strip=True) for node in fallback_nodes)
+        else:
+            text = soup.get_text(separator="\n")
         
     # 3. Clean up whitespace and empty lines
     lines = (line.strip() for line in text.splitlines())
@@ -130,10 +136,22 @@ def extract_text_universal(file_path: str) -> str:
 async def extract_text_from_url(url: str) -> str:
     """Scrape, extract, and specifically clean main content from a URL asynchronously."""
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        async with httpx.AsyncClient(headers=headers, timeout=10) as client:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+        async with httpx.AsyncClient(
+            headers=headers,
+            timeout=httpx.Timeout(20.0, connect=10.0),
+            follow_redirects=True,
+        ) as client:
             response = await client.get(url)
             response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "text/plain" in content_type:
+            return response.text.strip()
         
         soup = BeautifulSoup(response.text, "html.parser")
         return clean_url_text(soup)

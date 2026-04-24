@@ -34,6 +34,7 @@ def build_rag_prompt(
     """
 
     # 1. Format Context with numbering for better LLM grounding
+    has_context = bool(context)
     if context:
         context_parts = []
         for i, chunk in enumerate(context, 1):
@@ -43,7 +44,7 @@ def build_rag_prompt(
     else:
         context_section = (
             "### RELEVANT KNOWLEDGE\n"
-            "[No internal documents found. Answer using general knowledge but notify the user.]"
+            "[No trusted internal knowledge snippets are available for this query.]"
         )
 
     # 2. Build Chat History Summary (last 10 messages)
@@ -58,14 +59,22 @@ def build_rag_prompt(
 
     # 3. System Prompt (The Brain/Rules)
     base_persona = persona if persona else "You are a helpful and professional AI assistant."
+    context_rule = (
+        "Use only the provided RELEVANT KNOWLEDGE as the source of truth. "
+        "If details are missing, say you don't have enough information and ask a brief follow-up question."
+        if has_context else
+        "No internal knowledge is available for this turn. Answer naturally using general knowledge without claiming access to internal docs. "
+        "If the user asks account/product-specific details, clearly say you need more details."
+    )
+
     system_prompt = f"""{base_persona}
 
 CORE INSTRUCTIONS:
-1. **Source Grounding**: Answer using ONLY the provided 'RELEVANT KNOWLEDGE'. If information is missing, admit it politely.
-2. **Markdown Priority**: Use bold text, bullet points, and clean spacing to make your answer readable.
-3. **Tone**: Be professional, warm, and concise. Avoid yapping or repetitive filler phrases.
-4. **Context Loop**: Use the 'RECENT CONVERSATION' to understand pronouns (it, they, that) or follow-up requests.
-5. **No Hallucinations**: Do NOT invent features, dates, or facts not present in the context.
+1. **Source Grounding**: {context_rule}
+2. **Tone**: Be professional, warm, and concise.
+3. **Style**: Reply in normal conversational prose by default (no section headings like "Introduction" / "Next Steps" unless the user explicitly asks for a structured format).
+4. **Context Loop**: Use the 'RECENT CONVERSATION' to resolve pronouns and follow-up requests.
+5. **No Hallucinations**: Do NOT invent features, dates, policies, or facts.
 """
 
     # 4. User Prompt (The specific task)
@@ -284,14 +293,31 @@ async def generate_llm_stream(prompt: str | dict):
 
 
 
-async def generate_suggested_questions(context_snippets: List[str]) -> List[str]:
-    """Generates 3 relevant starter questions based on document context."""
-    snippets_text = "\n---\n".join(context_snippets[:5])
+async def generate_suggested_questions(context_snippets) -> List[str]:
+    """Generates up to 3 relevant starter questions based on document context."""
+    normalized_snippets: List[str] = []
+
+    if isinstance(context_snippets, dict):
+        chunks = context_snippets.get("chunks", [])
+        if isinstance(chunks, list):
+            normalized_snippets = [str(chunk) for chunk in chunks if chunk]
+    elif isinstance(context_snippets, list):
+        normalized_snippets = [str(chunk) for chunk in context_snippets if chunk]
+    elif isinstance(context_snippets, str) and context_snippets.strip():
+        normalized_snippets = [context_snippets]
+
+    if not normalized_snippets:
+        return ["Who are you?", "What can you do?", "Tell me about yourself."]
+
+    snippets_text = "\n---\n".join(normalized_snippets[:5])
     prompt = {
         "system": "You are a helpful AI assistant. Based on the provided snippets from a knowledge base, generate exactly 3 short, engaging, and professional 'starter questions' that a user might want to ask this AI. Return ONLY the questions, one per line. No numbers, no extra text.",
         "user": f"Document Snippets:\n{snippets_text}\n\nGenerate 3 questions:"
     }
     
-    response, _ = await generate_llm_response(prompt)
-    questions = [q.strip() for q in response.split("\n") if q.strip()]
-    return questions[:3]
+    try:
+        response, _ = await generate_llm_response(prompt)
+        questions = [q.strip() for q in response.split("\n") if q.strip()]
+        return questions[:3] or ["Who are you?", "What can you do?", "Tell me about yourself."]
+    except Exception:
+        return ["Who are you?", "What can you do?", "Tell me about yourself."]

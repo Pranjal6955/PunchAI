@@ -449,7 +449,7 @@ export default function AgentDashboard() {
           </TabsContent>
 
           <TabsContent value="widget" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">
-            <WidgetCustomizer bot={bot} onUpdate={(updatedBot) => setBot(updatedBot)} />
+            <WidgetCustomizer bot={bot} onUpdate={(updatedBot) => mutateBot(updatedBot, false)} />
           </TabsContent>
 
           <TabsContent value="review" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">

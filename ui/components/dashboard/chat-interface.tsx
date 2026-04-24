@@ -67,6 +67,7 @@ export function ChatInterface({ bot, userId, className }: ChatInterfaceProps) {
     // Optimistic update
     const tempUserMsg: Message = {
       id: Date.now().toString(),
+      chatId: chatId,
       role: "USER",
       content: userMessageContent,
       createdAt: new Date().toISOString(),

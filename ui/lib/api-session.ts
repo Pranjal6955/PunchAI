@@ -73,11 +73,19 @@ export const authorizedFetch = async (
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildApiUrl(path), {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    return new Response(JSON.stringify({ detail: "Network error" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if (response.status === 401 && retryOnUnauthorized) {
     const refreshedToken = await refreshAccessToken();
@@ -85,12 +93,18 @@ export const authorizedFetch = async (
     if (refreshedToken) {
       const retryHeaders = new Headers(init.headers ?? undefined);
       retryHeaders.set("Authorization", `Bearer ${refreshedToken}`);
-
-      return fetch(buildApiUrl(path), {
-        ...init,
-        headers: retryHeaders,
-        credentials: "include",
-      });
+      try {
+        return await fetch(buildApiUrl(path), {
+          ...init,
+          headers: retryHeaders,
+          credentials: "include",
+        });
+      } catch {
+        return new Response(JSON.stringify({ detail: "Network error" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
     }
   }
 
