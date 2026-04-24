@@ -13,28 +13,13 @@ import {
 import { usePathname, useParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { getBot } from "@/lib/api-session";
+import { useBot } from "@/hooks/use-bot";
 
 export function DashboardHeader() {
   const pathname = usePathname();
   const params = useParams();
-  const [botName, setBotName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchBotName = async () => {
-      const id = params?.Id as string;
-      if (id) {
-        try {
-          const bot = await getBot(id);
-          if (bot) setBotName(bot.name);
-        } catch (error) {
-          console.error("Failed to fetch bot for breadcrumb", error);
-        }
-      } else {
-        setBotName(null);
-      }
-    };
-    fetchBotName();
-  }, [params?.Id]);
+  const { bot } = useBot(params?.Id as string);
+  const botName = bot?.name || null;
 
   interface Crumb {
     label: string;

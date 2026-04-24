@@ -23,7 +23,6 @@ import {
     ChevronUp
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -132,7 +131,7 @@ export function FeedbackReview({ botId }: FeedbackReviewProps) {
                                             "{msg.content.slice(0, 100)}..."
                                         </p>
                                         <p className="text-[10px] text-muted-foreground mt-1 tracking-widest uppercase">
-                                            {format(new Date(msg.createdAt), "PPP p")}
+                                            {new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(msg.createdAt))}
                                         </p>
                                     </div>
                                 </div>

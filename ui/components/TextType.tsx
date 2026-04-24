@@ -9,7 +9,6 @@ import {
   useMemo,
   useCallback,
 } from "react";
-import { gsap } from "gsap";
 
 interface TextTypeProps {
   className?: string;
@@ -58,7 +57,6 @@ const TextType = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(!startOnVisible);
-  const cursorRef = useRef<HTMLSpanElement>(null);
   const containerRef = useRef<HTMLElement>(null);
 
   const textArray = useMemo(() => (Array.isArray(text) ? text : [text]), [text]);
@@ -93,19 +91,6 @@ const TextType = ({
   }, [startOnVisible]);
 
   useEffect(() => {
-    if (showCursor && cursorRef.current) {
-      gsap.set(cursorRef.current, { opacity: 1 });
-      gsap.to(cursorRef.current, {
-        opacity: 0,
-        duration: cursorBlinkDuration,
-        repeat: -1,
-        yoyo: true,
-        ease: "power2.inOut",
-      });
-    }
-  }, [showCursor, cursorBlinkDuration]);
-
-  useEffect(() => {
     if (!isVisible) return;
 
     let timeout: ReturnType<typeof setTimeout>;
@@ -127,7 +112,7 @@ const TextType = ({
 
           setCurrentTextIndex((prev) => (prev + 1) % textArray.length);
           setCurrentCharIndex(0);
-          timeout = setTimeout(() => {}, pauseDuration);
+          timeout = setTimeout(() => { }, pauseDuration);
         } else {
           timeout = setTimeout(() => {
             setDisplayedText((prev) => prev.slice(0, -1));
@@ -182,23 +167,38 @@ const TextType = ({
   const ValidComponent = Component;
 
   return (
-    <ValidComponent
-      ref={containerRef as React.Ref<any>}
-      className={`inline-block tracking-tight whitespace-pre-wrap ${className}`}
-      {...props}
-    >
-      <span className="inline" style={{ color: getCurrentTextColor() || "inherit" }}>
-        {displayedText}
-      </span>
-      {showCursor && (
-        <span
-          ref={cursorRef}
-          className={`ml-1 inline-block opacity-100 ${shouldHideCursor ? "hidden" : ""} ${cursorClassName}`}
-        >
-          {cursorCharacter}
+    <>
+      <style jsx>{`
+        @keyframes blink {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0;
+          }
+        }
+        .animate-cursor-blink {
+          animation: blink ${cursorBlinkDuration * 2}s ease-in-out infinite;
+        }
+      `}</style>
+      <ValidComponent
+        ref={containerRef as React.Ref<any>}
+        className={`inline-block tracking-tight whitespace-pre-wrap ${className}`}
+        {...props}
+      >
+        <span className="inline" style={{ color: getCurrentTextColor() || "inherit" }}>
+          {displayedText}
         </span>
-      )}
-    </ValidComponent>
+        {showCursor && (
+          <span
+            className={`animate-cursor-blink ml-1 inline-block ${shouldHideCursor ? "hidden" : ""} ${cursorClassName}`}
+          >
+            {cursorCharacter}
+          </span>
+        )}
+      </ValidComponent>
+    </>
   );
 };
 

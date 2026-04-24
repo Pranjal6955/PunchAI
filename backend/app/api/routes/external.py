@@ -15,7 +15,7 @@ from app.schemas.chat import (
     ChatListResponse,
     ExternalUserData,
 )
-from app.services.analytics import update_chat_insights
+
 
 router = APIRouter(prefix="/external", tags=["External"])
 
@@ -177,7 +177,7 @@ async def add_external_message(
     )
 
     # Part #1 & #3: Trigger AI Summary/Sentiment in Background
-    background_tasks.add_task(update_chat_insights, chat_id)
+
 
     return assistant_msg
 
@@ -275,7 +275,7 @@ async def add_external_message_stream(
                         }
                     )
                     # Trigger insights update after streaming completes
-                    background_tasks.add_task(update_chat_insights, chat_id)
+
                 except Exception as db_err:
                     logger.error(f"Failed to save assistant message during streaming finally: {db_err}")
 

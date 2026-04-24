@@ -13,6 +13,9 @@ import {
   DataSource,
 } from "@/lib/api-session";
 import { toast } from "sonner";
+import { useUser } from "@/hooks/use-user";
+import { useBot } from "@/hooks/use-bot";
+import { useDataSources } from "@/hooks/use-data-sources";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PERSONA_TEMPLATES, DEFAULT_CSS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -58,9 +61,10 @@ import {
 export default function AgentDashboard() {
   const { Id } = useParams();
   const router = useRouter();
-  const [bot, setBot] = React.useState<Bot | null>(null);
-  const [user, setUser] = React.useState<unknown>(null);
-  const [dataSources, setDataSources] = React.useState<DataSource[]>([]);
+  const { user, isLoading: userLoading } = useUser();
+  const { bot, isLoading: botLoading, mutate: mutateBot } = useBot(Id as string);
+  const { dataSources, isLoading: sourcesLoading } = useDataSources(Id as string);
+
   const [loading, setLoading] = React.useState(true);
   const [updating, setUpdating] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -74,39 +78,21 @@ export default function AgentDashboard() {
   const [showApiKey, setShowApiKey] = React.useState(false);
 
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!Id) return;
-      try {
-        const [botData, profile, sources] = await Promise.all([
-          getBot(Id as string),
-          getProfile(),
-          getDataSources(Id as string),
-        ]);
-
-        if (botData) {
-          setBot(botData);
-          setName(botData.name);
-          setDescription(botData.description || "");
-          const loadedPersona = botData.botPersona || "";
-          setPersona(loadedPersona);
-          setCustomCss(botData.customCss || DEFAULT_CSS);
-          // Pre-select the matching template if the stored persona matches one
-          const matchedTemplate = PERSONA_TEMPLATES.find((t) => t.value === loadedPersona);
-          setSelectedTemplate(matchedTemplate?.label ?? undefined);
-          setDataSources(sources || []);
-        } else {
-          toast.error("Agent not found");
-          router.push("/dashboard/chatbot");
-        }
-        setUser(profile);
-      } catch (error) {
-        console.error("Failed to fetch agent", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void fetchData();
-  }, [Id, router]);
+    if (!botLoading && !bot && !loading) {
+      toast.error("Agent not found");
+      router.push("/dashboard/chatbot");
+    }
+    if (bot) {
+      setName(bot.name);
+      setDescription(bot.description || "");
+      const loadedPersona = bot.botPersona || "";
+      setPersona(loadedPersona);
+      setCustomCss(bot.customCss || DEFAULT_CSS);
+      const matchedTemplate = PERSONA_TEMPLATES.find((t) => t.value === loadedPersona);
+      setSelectedTemplate(matchedTemplate?.label ?? undefined);
+      setLoading(false);
+    }
+  }, [bot, botLoading, router]);
 
   const handleUpdate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -122,7 +108,7 @@ export default function AgentDashboard() {
       });
 
       if (updatedBot) {
-        setBot(updatedBot);
+        mutateBot(updatedBot, false);
         toast.success("Agent updated successfully");
       } else {
         toast.error("Failed to update agent");
@@ -163,7 +149,7 @@ export default function AgentDashboard() {
     try {
       const updatedBot = await generateBotApiKey(Id as string);
       if (updatedBot) {
-        setBot(updatedBot);
+        mutateBot(updatedBot, false);
         setShowApiKey(true);
         toast.success("API Key generated successfully");
       } else {
