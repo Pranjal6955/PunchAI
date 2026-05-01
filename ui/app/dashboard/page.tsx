@@ -11,7 +11,10 @@ import {
   TrendingUp,
   Zap,
   ArrowRight,
-  Plus
+  Plus,
+  Activity,
+  History,
+  Bot as BotIcon
 } from "lucide-react";
 import Link from "next/link";
 import { useBots } from "@/hooks/use-bots";
@@ -35,270 +38,194 @@ export default function DashboardPage() {
   const recentBots = botsArray.slice(0, 3);
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8 p-4 md:p-8 pb-20">
       {/* Header Section */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back, {user?.name || "User"}! 👋
-        </h1>
-        <p className="text-muted-foreground">
-          Here&apos;s an overview of your AI chatbots and data sources
-        </p>
+      <div className="flex flex-col justify-between gap-6 px-1 md:flex-row md:items-end">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            Welcome back, {user?.name?.split(' ')[0] || "User"}
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Monitor your AI agents and data infrastructure.
+          </p>
+        </div>
+        <div className="flex gap-3">
+            <CreateAgentDialog onSuccess={() => mutateBots()} />
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           icon={Brain}
-          label="Active Chatbots"
+          label="Active Agents"
           value={totalChats}
-          description="AI agents deployed"
-          color="from-blue-500/10 to-blue-500/5"
-          iconColor="text-blue-600"
+          description="Deployments"
         />
         <StatCard 
           icon={Database}
-          label="Data Sources"
+          label="Knowledge Bases"
           value={totalDataSources}
-          description="Connected knowledge bases"
-          color="from-purple-500/10 to-purple-500/5"
-          iconColor="text-purple-600"
+          description="Data connections"
         />
         <StatCard 
           icon={MessageSquare}
-          label="Total Conversations"
-           value={botsArray.length > 0 ? "—" : "0"}
-          description="Across all chatbots"
-          color="from-emerald-500/10 to-emerald-500/5"
-          iconColor="text-emerald-600"
+          label="Conversations"
+          value={botsArray.length > 0 ? "—" : "0"}
+          description="Total inference"
         />
         <StatCard 
-          icon={TrendingUp}
-          label="Engagement Rate"
-           value="—"
-          description="User satisfaction"
-          color="from-amber-500/10 to-amber-500/5"
-          iconColor="text-amber-600"
+          icon={Activity}
+          label="System Health"
+          value="Optimal"
+          description="All services online"
         />
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <QuickActionCard
-          icon={Plus}
-          title="Create New Chatbot"
-          description="Build and deploy a new AI agent"
-          href="/dashboard/chatbot"
-          action={<CreateAgentDialog onSuccess={() => mutateBots()} />}
-        />
-        <QuickActionCard
-          icon={Database}
-          title="Upload Data Source"
-          description="Add PDFs, URLs, or FAQs"
-          href="/dashboard/dataSource"
-          actionLabel="Upload Now"
-        />
-        <QuickActionCard
-          icon={BarChart3}
-          title="View Analytics"
-          description="Monitor usage and performance"
-          href="/dashboard/analytics"
-          actionLabel="Explore"
-        />
-      </div>
-
-      {/* Recent Chatbots Section */}
-      <Card className="rounded-none border">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle>Your Chatbots</CardTitle>
-            <CardDescription>
-              {totalChats === 0 
-                ? "Create your first chatbot to get started" 
-                : `You have ${totalChats} active chatbot${totalChats !== 1 ? 's' : ''}`}
-            </CardDescription>
-          </div>
-          <Link href="/dashboard/chatbot">
-            <Button variant="outline" size="sm" className="gap-2 rounded-none">
-              View All <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {botsArray.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Brain className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="mb-4 text-center text-muted-foreground">
-                No chatbots yet. Create one to get started!
-              </p>
-              <CreateAgentDialog onSuccess={() => mutateBots()} />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentBots.map((bot) => (
-                <div 
-                  key={bot.id}
-                  className="hover:bg-muted/50 flex items-center justify-between rounded-lg border px-4 py-3 transition-colors"
-                >
-                  <div className="flex flex-1 items-center gap-4">
-                    <Brain className="h-5 w-5 text-primary" />
-                    <div className="flex-1">
-                      <Link 
-                        href={`/dashboard/chatbot/${bot.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {bot.name}
-                      </Link>
-                      <p className="text-sm text-muted-foreground">
-                        {bot.dataSourceCount || 0} data source{bot.dataSourceCount !== 1 ? 's' : ''} • Created {new Date(bot.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link href={`/dashboard/chatbot/${bot.id}/Playground`}>
-                      <Button variant="ghost" size="sm" className="gap-2 rounded-none">
-                        <MessageSquare className="h-4 w-4" /> Chat
-                      </Button>
-                    </Link>
-                    {isDeleting === bot.id && (
-                      <span className="text-xs text-muted-foreground">Deleting...</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {totalChats > 3 && (
-                <Link href="/dashboard/chatbot" className="block">
-                  <Button variant="ghost" className="w-full gap-2 rounded-none">
-                    View all {totalChats} chatbots <ArrowRight className="h-4 w-4" />
-                  </Button>
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Recent Chatbots Section */}
+        <div className="lg:col-span-2 space-y-6">
+            <div className="flex items-center justify-between px-1">
+                <h2 className="text-2xl font-semibold tracking-tight">Recent Agents</h2>
+                <Link href="/dashboard/chatbot">
+                    <Button variant="ghost" size="sm" className="gap-2 rounded-none">
+                        View All <ArrowRight className="h-4 w-4" />
+                    </Button>
                 </Link>
-              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+            
+            <div className="border border-border/60 bg-card overflow-hidden">
+                {botsArray.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="bg-muted mb-6 flex size-16 items-center justify-center">
+                            <BotIcon className="text-muted-foreground size-8" />
+                        </div>
+                        <h3 className="text-xl font-medium">No agents active</h3>
+                        <p className="text-muted-foreground mx-auto mt-2 mb-8 max-w-sm">
+                            Create your first AI agent to start building your knowledge base.
+                        </p>
+                        <CreateAgentDialog onSuccess={() => mutateBots()} />
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border/60">
+                    {recentBots.map((bot) => (
+                        <div 
+                        key={bot.id}
+                        className="group flex items-center justify-between p-5 transition-colors hover:bg-muted/30"
+                        >
+                        <div className="flex flex-1 items-center gap-4">
+                            <div className="flex h-10 w-10 items-center justify-center bg-muted">
+                                <Brain className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div className="flex-1">
+                                <Link 
+                                    href={`/dashboard/chatbot/${bot.id}`}
+                                    className="font-medium hover:underline decoration-primary/30 underline-offset-4"
+                                >
+                                    {bot.name}
+                                </Link>
+                                <p className="text-muted-foreground mt-0.5 text-xs">
+                                    {bot.dataSourceCount || 0} sources • v1.0
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Link href={`/dashboard/chatbot/${bot.id}/Playground`}>
+                                <Button variant="secondary" size="sm" className="rounded-none h-8 text-xs">
+                                    Chat
+                                </Button>
+                            </Link>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+                )}
+            </div>
+        </div>
 
-      {/* Getting Started Guide */}
-      <Card className="border bg-linear-to-br from-primary/5 to-primary/10 rounded-none">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Quick Start Guide
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-             {getQuickStartSteps().map((item) => (
-              <div key={item.step} className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                    {item.step}
-                  </div>
-                  <h3 className="font-semibold">{item.title}</h3>
+        {/* Quick Actions & Tips */}
+        <div className="space-y-8">
+            <div className="space-y-4">
+                <h2 className="text-xl font-semibold tracking-tight px-1">Quick Actions</h2>
+                <div className="grid gap-3">
+                    <DashboardAction 
+                        icon={Database}
+                        title="Add Data Source"
+                        href="/dashboard/dataSource"
+                    />
+                    <DashboardAction 
+                        icon={History}
+                        title="View Chat Logs"
+                        href="/dashboard/chatlogs"
+                    />
+                    <DashboardAction 
+                        icon={TrendingUp}
+                        title="Usage Analytics"
+                        href="/dashboard/analytics"
+                    />
                 </div>
-                <p className="ml-11 text-sm text-muted-foreground">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+
+            {/* Guide Card */}
+            <Card className="rounded-none border-border/60 bg-muted/20 shadow-none">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-primary" />
+                        Platform Guide
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-4">
+                        <StepItem step="1" text="Create your AI persona" />
+                        <StepItem step="2" text="Upload knowledge documents" />
+                        <StepItem step="3" text="Integrate the chat widget" />
+                    </div>
+                    <Button variant="outline" className="w-full rounded-none h-10 mt-2 text-xs">
+                        View Documentation
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Helper function to get quick start steps
-function getQuickStartSteps() {
-  return [
-    {
-      step: "1",
-      title: "Create an Agent",
-      description: "Set up your first AI chatbot with a custom persona and instructions"
-    },
-    {
-      step: "2",
-      title: "Add Knowledge",
-      description: "Upload PDFs, URLs, or FAQ documents to train your chatbot"
-    },
-    {
-      step: "3",
-      title: "Deploy & Chat",
-      description: "Start conversations and monitor performance in the playground"
-    }
-  ];
+// Sub-components
+function StatCard({ icon: Icon, label, value, description }: { icon: any, label: string, value: string | number, description: string }) {
+    return (
+        <Card className="rounded-none border-border/60 bg-card p-6 shadow-none">
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                <Icon className="h-4 w-4 text-muted-foreground/60" />
+            </div>
+            <div className="text-3xl font-bold tracking-tight">{value}</div>
+            <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-widest">{description}</p>
+        </Card>
+    )
 }
 
-// Stat Card Component
-function StatCard({ 
-  icon: Icon, 
-  label, 
-  value, 
-  description,
-  color,
-  iconColor
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  description: string;
-  color: string;
-  iconColor: string;
-}) {
-  return (
-    <Card className={cn("rounded-none border", color)}>
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {label}
-          </CardTitle>
-          <Icon className={cn("h-5 w-5", iconColor)} />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground pt-1">{description}</p>
-      </CardContent>
-    </Card>
-  );
+function DashboardAction({ icon: Icon, title, href }: { icon: any, title: string, href: string }) {
+    return (
+        <Link href={href}>
+            <div className="group flex items-center justify-between border border-border/60 bg-card p-4 hover:border-primary/50 transition-all">
+                <div className="flex items-center gap-3">
+                    <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <span className="text-sm font-medium">{title}</span>
+                </div>
+                <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
+            </div>
+        </Link>
+    )
 }
 
-// Quick Action Card Component
-function QuickActionCard({ 
-  icon: Icon, 
-  title, 
-  description, 
-  href,
-  actionLabel,
-  action
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  href?: string;
-  actionLabel?: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <Card className="rounded-none border transition-shadow hover:shadow-md">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-lg">{title}</CardTitle>
-            <CardDescription className="pt-1">{description}</CardDescription>
-          </div>
-          <Icon className="h-6 w-6 text-primary" />
+function StepItem({ step, text }: { step: string, text: string }) {
+    return (
+        <div className="flex gap-3 items-center">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-none bg-primary/10 text-[10px] font-bold text-primary">{step}</span>
+            <span className="text-xs font-medium text-muted-foreground">{text}</span>
         </div>
-      </CardHeader>
-      <CardContent>
-        {action ? (
-          action
-        ) : (
-          <Link href={href || "#"}>
-            <Button variant="outline" size="sm" className="gap-2 rounded-none w-full">
-              {actionLabel || "Get Started"} <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        )}
-      </CardContent>
-    </Card>
-  );
+    )
 }
+
+
