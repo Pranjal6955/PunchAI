@@ -3,6 +3,7 @@ LLM Service for PunchAI with OpenRouter and Groq fallback.
 Builds the RAG prompt and generates a response based on retrieved context.
 """
 
+import re
 from typing import List, Optional
 from openai import AsyncOpenAI
 from groq import AsyncGroq
@@ -33,6 +34,7 @@ def build_rag_prompt(
     """
 
     # 1. Format Context with numbering for better LLM grounding
+    has_context = bool(context)
     if context:
         context_parts = []
         for i, chunk in enumerate(context, 1):
@@ -42,7 +44,7 @@ def build_rag_prompt(
     else:
         context_section = (
             "### RELEVANT KNOWLEDGE\n"
-            "[No internal documents found. Answer using general knowledge but notify the user.]"
+            "[No trusted internal knowledge snippets are available for this query.]"
         )
 
     # 2. Build Chat History Summary (last 10 messages)
@@ -57,14 +59,22 @@ def build_rag_prompt(
 
     # 3. System Prompt (The Brain/Rules)
     base_persona = persona if persona else "You are a helpful and professional AI assistant."
+    context_rule = (
+        "Use only the provided RELEVANT KNOWLEDGE as the source of truth. "
+        "If details are missing, say you don't have enough information and ask a brief follow-up question."
+        if has_context else
+        "No internal knowledge is available for this turn. Answer naturally using general knowledge without claiming access to internal docs. "
+        "If the user asks account/product-specific details, clearly say you need more details."
+    )
+
     system_prompt = f"""{base_persona}
 
 CORE INSTRUCTIONS:
-1. **Source Grounding**: Answer using ONLY the provided 'RELEVANT KNOWLEDGE'. If information is missing, admit it politely.
-2. **Markdown Priority**: Use bold text, bullet points, and clean spacing to make your answer readable.
-3. **Tone**: Be professional, warm, and concise. Avoid yapping or repetitive filler phrases.
-4. **Context Loop**: Use the 'RECENT CONVERSATION' to understand pronouns (it, they, that) or follow-up requests.
-5. **No Hallucinations**: Do NOT invent features, dates, or facts not present in the context.
+1. **Source Grounding**: {context_rule}
+2. **Tone**: Be professional, warm, and concise.
+3. **Style**: Reply in normal conversational prose by default (no section headings like "Introduction" / "Next Steps" unless the user explicitly asks for a structured format).
+4. **Context Loop**: Use the 'RECENT CONVERSATION' to resolve pronouns and follow-up requests.
+5. **No Hallucinations**: Do NOT invent features, dates, policies, or facts.
 """
 
     # 4. User Prompt (The specific task)
@@ -112,9 +122,8 @@ User: {question}
 ### SEARCH QUERY
 """
     try:
-        import re
         # P1 Enhancement: Use Groq for faster query refinement (0.5s vs 1.8s)
-        refined = await generate_groq_response(query_refiner_prompt)
+        refined, _ = await generate_groq_response(query_refiner_prompt)
         
         # Take the most likely line and strip prefixes
         lines = [l.strip() for l in refined.split('\n') if l.strip()]
@@ -127,10 +136,47 @@ User: {question}
         return final_query if final_query else question
     except Exception:
         return question
+async def generate_expanded_queries(query: str, n: int = 2) -> List[str]:
+    """
+    Query Expansion (P2 Feature):
+    Generates N additional varied queries to improve retrieval recall.
+    """
+    if len(query.split()) < 2:
+        return [query]
+
+    prompt = f"""### TASK
+Generate {n} different search variations for the user query below. 
+These variations should help retrieve different but related knowledge base search terms.
+
+User Query: {query}
+
+Guidelines:
+- Return ONLY the queries, one per line.
+- Do NOT provide numbering, bullets, or extra text.
+- Variations should use synonyms or explore related sub-topics.
+
+### VARIATIONS
+"""
+    try:
+        # Use Groq for speed
+        from app.services.llm import generate_groq_response
+        response, _ = await generate_groq_response(prompt)
+        queries = [l.strip() for l in response.split('\n') if l.strip()]
+        
+        cleaned_queries = [query] # Always start with original
+        for q in queries:
+            # Remove leading numbers/bullets if any
+            q = re.sub(r'^[\d\.\-\*\)\s]+', '', q).strip()
+            if q and q.lower() != query.lower():
+                cleaned_queries.append(q)
+        
+        return cleaned_queries[:n+1]
+    except Exception as e:
+        logger.warning(f"Query expansion failed: {e}")
+        return [query]
 
 
-
-async def generate_openrouter_response(prompt: str | dict) -> str:
+async def generate_openrouter_response(prompt: str | dict, model: str = None) -> tuple[str, dict]:
     """Calls OpenRouter asynchronously. Supports both raw strings and System/User dicts."""
     try:
         messages = []
@@ -143,22 +189,27 @@ async def generate_openrouter_response(prompt: str | dict) -> str:
             messages = [{"role": "user", "content": prompt}]
 
         response = await openrouter_client.chat.completions.create(
-            model=settings.OPENROUTER_MODEL,
+            model=model or settings.OPENROUTER_MODEL,
             messages=messages,
             extra_headers={
                 "HTTP-Referer": "https://punchai.app",
                 "X-Title": "PunchAI",
             }
         )
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "total_tokens": response.usage.total_tokens if response.usage else 0
+        }
         if response.choices:
-            return response.choices[0].message.content
+            return response.choices[0].message.content, usage
         raise Exception("OpenRouter returned no response choices.")
     except Exception as e:
         logger.error(f"OpenRouter Error: {e}")
         raise e
 
 
-async def generate_groq_response(prompt: str | dict) -> str:
+async def generate_groq_response(prompt: str | dict, model: str = None) -> tuple[str, dict]:
     """Calls Groq asynchronously as a fallback. Supports System/User dicts."""
     try:
         messages = []
@@ -171,24 +222,29 @@ async def generate_groq_response(prompt: str | dict) -> str:
             messages = [{"role": "user", "content": prompt}]
 
         response = await groq_client.chat.completions.create(
-            model=settings.GROQ_MODEL,
+            model=model or settings.GROQ_MODEL,
             messages=messages,
         )
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+            "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+            "total_tokens": response.usage.total_tokens if response.usage else 0
+        }
         if response.choices:
-            return response.choices[0].message.content
-        return "Groq returned no response choices."
+            return response.choices[0].message.content, usage
+        return "Groq returned no response choices.", usage
     except Exception as e:
         logger.error(f"Groq Error: {e}")
-        return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}"
+        return f"I'm sorry, I'm having trouble reaching my AI engines. Error: {str(e)}", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-async def generate_llm_response(prompt: str) -> str:
+async def generate_llm_response(prompt: str, model: str = None) -> tuple[str, dict]:
     """Main entry point with async fallback: OpenRouter -> Groq."""
     try:
-        return await generate_openrouter_response(prompt)
+        return await generate_openrouter_response(prompt, model=model)
     except Exception:
         logger.warning("Switching to Groq fallback...")
-        return await generate_groq_response(prompt)
+        return await generate_groq_response(prompt, model=model)
 
 
 async def generate_llm_stream(prompt: str | dict):
@@ -236,116 +292,32 @@ async def generate_llm_stream(prompt: str | dict):
             yield f"Error: {str(e2)}"
 
 
-async def generate_conversation_insights(history: List[dict]) -> dict:
-    """
-    Analytics & Sentiment Analysis.
-    Uses LLM to summarize the conversation and detect sentiment.
 
-    Returns a dict with:
-      - summary: str   — one-sentence conversation summary
-      - sentiment: str — one of Happy | Neutral | Frustrated | Curious
-    """
-    if not history:
-        return {"summary": "No history to summarize.", "sentiment": "Neutral"}
+async def generate_suggested_questions(context_snippets) -> List[str]:
+    """Generates up to 3 relevant starter questions based on document context."""
+    normalized_snippets: List[str] = []
 
-    history_text = ""
-    for msg in history:
-        if isinstance(msg, dict):
-            role = msg.get('role', 'USER')
-            content = msg.get('content', '')
-        else:
-            role = getattr(msg, 'role', 'USER')
-            content = getattr(msg, 'content', '')
-        history_text += f"{role}: {content}\n"
+    if isinstance(context_snippets, dict):
+        chunks = context_snippets.get("chunks", [])
+        if isinstance(chunks, list):
+            normalized_snippets = [str(chunk) for chunk in chunks if chunk]
+    elif isinstance(context_snippets, list):
+        normalized_snippets = [str(chunk) for chunk in context_snippets if chunk]
+    elif isinstance(context_snippets, str) and context_snippets.strip():
+        normalized_snippets = [context_snippets]
 
-    prompt = f"""### TASK
-Analyze the conversation history below and return a JSON object.
+    if not normalized_snippets:
+        return ["Who are you?", "What can you do?", "Tell me about yourself."]
 
-You MUST:
-1. Write a one-sentence **summary** that captures the main topic and outcome.
-2. Classify the overall **user sentiment** using EXACTLY one of these values (case-sensitive):
-   - Happy      → user is satisfied, pleased, or grateful
-   - Neutral    → user is informational, balanced, or has no strong emotion
-   - Frustrated → user is upset, annoyed, or dissatisfied
-   - Curious    → user is exploring, asking many questions, or fact-finding
-
-### CONVERSATION HISTORY
-{history_text}
-
-### RESPONSE FORMAT
-Return ONLY a raw JSON object — no markdown, no code fences, no extra text:
-{{"summary": "...", "sentiment": "Happy|Neutral|Frustrated|Curious"}}
-"""
-
-    # Canonical set
-    VALID_SENTIMENTS = {"Happy", "Neutral", "Frustrated", "Curious"}
-
-    # Synonym map — normalises unexpected LLM outputs to our canonical labels
-    SYNONYM_MAP = {
-        "happy": "Happy",
-        "positive": "Happy",
-        "satisfied": "Happy",
-        "grateful": "Happy",
-        "pleased": "Happy",
-        "good": "Happy",
-        "great": "Happy",
-        "frustrated": "Frustrated",
-        "negative": "Frustrated",
-        "upset": "Frustrated",
-        "angry": "Frustrated",
-        "annoyed": "Frustrated",
-        "bad": "Frustrated",
-        "dissatisfied": "Frustrated",
-        "neutral": "Neutral",
-        "informational": "Neutral",
-        "mixed": "Neutral",
-        "balanced": "Neutral",
-        "curious": "Curious",
-        "inquisitive": "Curious",
-        "exploring": "Curious",
-        "interested": "Curious",
+    snippets_text = "\n---\n".join(normalized_snippets[:5])
+    prompt = {
+        "system": "You are a helpful AI assistant. Based on the provided snippets from a knowledge base, generate exactly 3 short, engaging, and professional 'starter questions' that a user might want to ask this AI. Return ONLY the questions, one per line. No numbers, no extra text.",
+        "user": f"Document Snippets:\n{snippets_text}\n\nGenerate 3 questions:"
     }
-
+    
     try:
-        # P1 Enhancement: Use Groq for faster background analysis
-        raw_response = await generate_groq_response(prompt)
-
-        import json, re
-
-        # Strip markdown code fences if the LLM wrapped the JSON
-        cleaned = re.sub(r"```(?:json)?\s*", "", raw_response).strip().strip("`")
-
-        # Extract the first JSON object
-        match = re.search(r'\{.*?\}', cleaned, re.DOTALL)
-        if not match:
-            logger.warning(f"No JSON found in insight response: {raw_response[:200]}")
-            return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
-
-        parsed = json.loads(match.group())
-        summary = parsed.get("summary", "").strip() or "Summary unavailable."
-
-        # Normalise sentiment — strip punctuation, then title-case match
-        raw_sentiment = str(parsed.get("sentiment", "")).strip().rstrip(".,;!")
-        raw_lower = raw_sentiment.lower()
-
-        # Check exact match first (e.g. "Happy"), then synonym lookup
-        matched = next((v for v in VALID_SENTIMENTS if v.lower() == raw_lower), None)
-        if matched:
-            sentiment = matched
-        else:
-            sentiment = SYNONYM_MAP.get(raw_lower, "Neutral")
-            if sentiment == "Neutral" and raw_lower not in SYNONYM_MAP:
-                logger.warning(
-                    f"Unknown sentiment '{raw_sentiment}' — defaulting to Neutral"
-                )
-
-        logger.info(f"Sentiment resolved: '{raw_sentiment}' → '{sentiment}'")
-        return {"summary": summary, "sentiment": sentiment}
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON parse error in insight generation: {e} | raw: {raw_response[:300]}")
-        return {"summary": "Summary unavailable.", "sentiment": "Neutral"}
-    except Exception as e:
-        logger.error(f"Insight Generation Error: {e}")
-        return {"summary": "Analysis failed.", "sentiment": "Neutral"}
-
+        response, _ = await generate_llm_response(prompt)
+        questions = [q.strip() for q in response.split("\n") if q.strip()]
+        return questions[:3] or ["Who are you?", "What can you do?", "Tell me about yourself."]
+    except Exception:
+        return ["Who are you?", "What can you do?", "Tell me about yourself."]

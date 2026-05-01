@@ -30,6 +30,7 @@ class ExternalUserData(BaseModel):
 class MessageCreate(BaseModel):
     role: str = "USER"       # USER | ASSISTANT | SYSTEM
     content: str
+    model: Optional[str] = None # P3: model override for Playground
     metadata: Optional[dict[str, Any]] = None
 
 
@@ -40,6 +41,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     metadata: Optional[Any] = None
+    feedback: Optional[int] = None
     chatId: str
     createdAt: datetime
 
@@ -56,8 +58,6 @@ class ChatResponse(BaseModel):
     externalUserId: Optional[str] = None
     externalUserName: Optional[str] = None
     externalUserEmail: Optional[str] = None
-    summary: Optional[str] = None
-    sentiment: Optional[str] = None
     customMetadata: Optional[Any] = None
     createdAt: datetime
     updatedAt: datetime

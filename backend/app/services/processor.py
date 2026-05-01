@@ -45,6 +45,23 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+async def extract_entities(text: str) -> List[str]:
+    """GraphRAG Exploration Step: Extract key entities to build relationships."""
+    from app.services.llm import generate_groq_response
+    prompt = f"""Extract at most 5 primary entities (names, products, organizations, locations) from the text below.
+Return them as a comma-separated list. Return ONLY the names.
+
+Text: {text[:1000]}
+Entities:"""
+    try:
+        res, _ = await generate_groq_response(prompt)
+        # Take the last line in case of preamble
+        last_line = res.strip().split('\n')[-1]
+        return [e.strip() for e in last_line.split(',') if e.strip()][:5]
+    except Exception:
+        return []
+
+
 async def process_and_store(
     bot_id: str, 
     source_id: str, 
@@ -70,6 +87,11 @@ async def process_and_store(
     if not chunks:
         return False
 
+    # 2b. GraphRAG Exploration: Extract entities from the first chunk to enrich source metadata
+    entities = []
+    if chunks:
+        entities = await extract_entities(chunks[0])
+
     # 3. SQL Storage (Postgres) - Optimized: Sync small chunks to Postgres in bulk
     from app.core.database import db
     try:
@@ -91,12 +113,17 @@ async def process_and_store(
     # 4. Vector Storage (Chroma)
     collection = await run_in_threadpool(get_collection, bot_id)
     
-    # Prepare IDs and Metadatas for Chroma
-    ids = [f"{source_id}_{i}" for i in range(len(chunks))]
+    tot_chunks = len(chunks)
+    ids = [f"{source_id}_{i}" for i in range(tot_chunks)]
     metadatas = []
-    for i in range(len(chunks)):
+    for i in range(tot_chunks):
         meta = metadata.copy() if metadata else {}
-        meta.update({"source_id": source_id, "bot_id": bot_id, "chunk_index": i})
+        meta.update({
+            "source_id": source_id, 
+            "bot_id": bot_id, 
+            "chunk_index": i,
+            "entities": ",".join(entities) if entities else ""
+        })
         metadatas.append(meta)
 
     # 5. Explicit Embedding Generation (CPU-bound)
@@ -217,49 +244,62 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
         return []
 
 
-async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5) -> List[str]:
+async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool = True) -> Dict[str, Any]:
     """
     Combines Semantic Search and Keyword Search (Hybrid Search) with Re-ranking.
-    1. Retrieves candidates using Semantic (Chroma) and Keyword (Postgres).
-    2. Interleaves top candidates.
-    3. Re-ranks candidates using a Cross-Encoder for maximum accuracy.
+    Now with P2 Query Expansion (Multihop Retrieval).
+    Returns: { "chunks": List[str], "top_score": float, "is_knowledge_gap": bool }
     """
-    # 1. Run retrieval in parallel (Top-K*2 to have enough candidates for re-ranking)
-    candidate_k = top_k * 2
-    semantic_task = retrieve_semantic(bot_id, query, top_k=candidate_k)
-    keyword_task = retrieve_keywords(bot_id, query, top_k=candidate_k)
+    # 1. Query Expansion (if enabled)
+    from app.services.llm import generate_expanded_queries
+    queries = await generate_expanded_queries(query) if expand else [query]
     
-    semantic_results, keyword_results = await asyncio.gather(semantic_task, keyword_task)
-    
-    # 2. Balanced Interweaving to get a candidate pool
-    candidates = []
+    all_candidates = []
     seen = set()
     
-    for i in range(candidate_k):
-        if i < len(semantic_results):
-            chunk = semantic_results[i]
+    # 2. Parallel retrieval for all query variations
+    # We retrieve candidate_k candidates per query
+    candidate_k = top_k * 2
+    
+    tasks = []
+    for q in queries:
+        tasks.append(retrieve_semantic(bot_id, q, top_k=candidate_k))
+        tasks.append(retrieve_keywords(bot_id, q, top_k=candidate_k))
+    
+    results = await asyncio.gather(*tasks)
+    
+    # Combine results from all tasks
+    for result_list in results:
+        for chunk in result_list:
             if chunk not in seen:
-                candidates.append(chunk)
-                seen.add(chunk)
-        
-        if i < len(keyword_results):
-            chunk = keyword_results[i]
-            if chunk not in seen:
-                candidates.append(chunk)
+                all_candidates.append(chunk)
                 seen.add(chunk)
     
-    if not candidates:
-        return []
+    if not all_candidates:
+        return {
+            "chunks": [],
+            "top_score": 0.0,
+            "is_knowledge_gap": True
+        }
 
-    # 3. P1 Enhancement: Cross-Encoder Re-ranking
-    # We score each (query, candidate) pair
-    pairs = [[query, cand] for cand in candidates]
+    # 3. Re-ranking: Score ALL candidates against the ORIGINAL query
+    # This ensures accuracy even if expanded queries were a bit off
+    pairs = [[query, cand] for cand in all_candidates]
     
     # Run scoring in threadpool (CPU bound)
     scores = await run_in_threadpool(reranker.predict, pairs)
     
     # Combine and sort by score (descending)
-    scored_candidates = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
+    scored_candidates = sorted(zip(all_candidates, scores), key=lambda x: x[1], reverse=True)
     
-    # Return top_k
-    return [c for c, s in scored_candidates[:top_k]]
+    top_score = float(scored_candidates[0][1]) if scored_candidates else 0.0
+    
+    # Knowledge Gap threshold: if top score is very low (e.g. < -5 for ms-marco), mark as gap
+    # ms-marco-MiniLM-L-6-v2 scores are logits, usually -10 to 10.
+    is_knowledge_gap = top_score < -2.0 
+
+    return {
+        "chunks": [c for c, s in scored_candidates[:top_k]],
+        "top_score": top_score,
+        "is_knowledge_gap": is_knowledge_gap
+    }

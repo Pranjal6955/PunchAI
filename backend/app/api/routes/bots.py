@@ -10,6 +10,8 @@ from app.schemas.bot import BotCreate, BotUpdate, BotResponse, BotListResponse, 
 from app.schemas.chat import ChatListResponse
 from app.api.deps import get_current_user
 from app.core.vector_store import delete_collection
+from app.services.processor import hybrid_retrieve
+from app.services.llm import generate_suggested_questions
 import uuid
 
 router = APIRouter(prefix="/bots", tags=["Bots"])
@@ -165,3 +167,37 @@ async def get_bot_conversations(
         order={"updatedAt": "desc"}
     )
     return {"data": chats, "total": len(chats)}
+
+@router.get("/{bot_id}/feedback-messages")
+async def get_negative_feedback_messages(bot_id: str, current_user=Depends(get_current_user)):
+    """Retrieve all messages with negative feedback for this bot."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot or bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    messages = await db.message.find_many(
+        where={
+            "chat": {"botId": bot_id},
+            "feedback": -1
+        },
+        order={"createdAt": "desc"}
+    )
+    return messages
+
+@router.get("/{bot_id}/suggested-questions")
+async def get_suggested_questions(bot_id: str, current_user=Depends(get_current_user)):
+    """Auto-generate context-aware starter questions for the bot."""
+    bot = await db.bot.find_unique(where={"id": bot_id})
+    if not bot or bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # 1. Grab some context from the bot's KB
+    context = await hybrid_retrieve(bot_id, "Explain top themes and purpose of these documents", top_k=5)
+
+    context_chunks = context.get("chunks", []) if isinstance(context, dict) else context
+    if not context_chunks:
+        return ["Who are you?", "What can you do?", "Tell me about yourself."]
+
+    # 2. Ask LLM to generate questions
+    questions = await generate_suggested_questions(context_chunks)
+    return questions

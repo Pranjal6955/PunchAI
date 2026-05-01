@@ -3,10 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { BotMessageSquare, Eye, EyeOff, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { Loading03Icon } from "@hugeicons/core-free-icons";
-import { BotMessageSquare, Eye, EyeOff } from "lucide-react";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -199,7 +197,7 @@ export default function RegisterPage() {
 
         <div className="relative z-10 flex items-center gap-2">
           <Image
-            src="/Logo_dark_theme.png"
+            src="/Logo_dark_theme.webp"
             alt="PunchAI"
             width={120}
             height={40}
@@ -226,7 +224,7 @@ export default function RegisterPage() {
         {/* Mobile branding */}
         <div className="mb-10 flex items-center gap-2 md:hidden">
           <Image
-            src="/Logo_dark_theme.png"
+            src="/Logo_dark_theme.webp"
             alt="PunchAI"
             width={120}
             height={40}
@@ -362,7 +360,7 @@ export default function RegisterPage() {
               disabled={isLoading || !isValid || !termsAccepted}
             >
               {isLoading && (
-                <HugeiconsIcon icon={Loading03Icon} className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
               Create Account
             </Button>

@@ -3,8 +3,10 @@ Pydantic schemas for Data Source management (PDF, URL, FAQ).
 """
 
 from pydantic import BaseModel, HttpUrl
+from pydantic import TypeAdapter, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
+import re
 
 
 # ── FAQ Entry ──
@@ -34,8 +36,21 @@ class FAQResponse(BaseModel):
 # ── Request Schemas ──
 
 class URLSourceCreate(BaseModel):
-    url: HttpUrl
+    url: str
     botId: str
+
+    @field_validator("url")
+    @classmethod
+    def normalize_and_validate_url(cls, value: str) -> str:
+        url = value.strip()
+        if not url:
+            raise ValueError("URL is required")
+
+        if not re.match(r"^https?://", url, flags=re.IGNORECASE):
+            url = f"https://{url}"
+
+        validated = TypeAdapter(HttpUrl).validate_python(url)
+        return str(validated)
 
 
 class FAQSourceCreate(BaseModel):

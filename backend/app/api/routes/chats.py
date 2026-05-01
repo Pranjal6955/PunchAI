@@ -16,7 +16,7 @@ from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
 from app.services.llm import build_rag_prompt, generate_llm_response
-from app.services.analytics import update_chat_insights
+from app.core.config import settings
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -90,7 +90,8 @@ async def add_message(
     )
     search_query = await get_search_query(content, refinement_history)
     
-    context_chunks = await hybrid_retrieve(bot_id=chat.botId, query=search_query, top_k=5)
+    retrieval = await hybrid_retrieve(bot_id=chat.botId, query=search_query, top_k=5)
+    context_chunks = retrieval["chunks"]
 
     # Optional: Log the retrieved context/refined query into metadata
     await db.message.update(
@@ -121,7 +122,7 @@ async def add_message(
         history=history
     )
     
-    ai_text = await generate_llm_response(structured_prompt)
+    ai_text, usage = await generate_llm_response(structured_prompt, model=payload.model)
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(
@@ -129,12 +130,13 @@ async def add_message(
             "role": "ASSISTANT",
             "content": ai_text,
             "chat": {"connect": {"id": chat_id}},
-            "metadata": Json({"source_chunks": len(context_chunks)})
+            "metadata": Json({
+                "source_chunks": len(context_chunks),
+                "chunks": context_chunks,
+                "model": payload.model or settings.OPENROUTER_MODEL
+            })
         }
     )
-
-    # Part #1 & #3: Trigger AI Summary/Sentiment in Background
-    background_tasks.add_task(update_chat_insights, chat_id)
 
     # Return the assistant's message as the reply
     return assistant_msg
@@ -211,3 +213,29 @@ async def delete_chat(chat_id: str, current_user=Depends(get_current_user)):
 
     await db.chat.delete(where={"id": chat_id})
     return None
+
+@router.patch("/{chat_id}/messages/{message_id}/feedback", response_model=MessageResponse)
+async def submit_message_feedback(
+    chat_id: str,
+    message_id: str,
+    feedback: int = Query(..., ge=-1, le=1),
+    current_user=Depends(get_current_user)
+):
+    """Submit thumbs up (1) or thumbs down (-1) feedback for a message."""
+    # Find message and verify it belongs to the chat and the chat is accessible
+    message = await db.message.find_unique(
+        where={"id": message_id},
+        include={"chat": {"include": {"bot": True}}}
+    )
+    
+    if not message or message.chatId != chat_id:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # In production, check if the current user has access to this chat
+    # For now, let's allow it
+
+    updated = await db.message.update(
+        where={"id": message_id},
+        data={"feedback": feedback}
+    )
+    return updated

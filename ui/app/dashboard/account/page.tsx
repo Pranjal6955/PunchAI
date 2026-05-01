@@ -3,12 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { User, Camera, Lock, User as UserIcon, Save, Loader2 } from "lucide-react";
 import {
-  getProfile,
   updateProfile,
-  uploadAvatar,
-  User as UserType,
   getAvatarUrl,
 } from "@/lib/api-session";
+import { useUser } from "@/hooks/use-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 export default function AccountPage() {
-  const [user, setUser] = useState<UserType | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, isLoading, updateUserName, updateUserPassword, uploadUserAvatar } = useUser();
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -39,40 +36,18 @@ export default function AccountPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    async function fetchUser() {
-      try {
-        const data = await getProfile();
-        if (data) {
-          setUser(data);
-          setName(data.name || "");
-        }
-      } catch (error) {
-        toast.error("Failed to fetch profile");
-      } finally {
-        setIsLoading(false);
-      }
+    if (user) {
+      setName(user.name || "");
     }
-    fetchUser();
-  }, []);
+  }, [user]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     setIsSavingProfile(true);
-    try {
-      const updated = await updateProfile(user.id, { name });
-      if (updated) {
-        setUser(updated);
-        toast.success("Profile updated successfully");
-      } else {
-        toast.error("Failed to update profile");
-      }
-    } catch (error) {
-      toast.error("An error occurred while updating profile");
-    } finally {
-      setIsSavingProfile(false);
-    }
+    await updateUserName(name);
+    setIsSavingProfile(false);
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -90,20 +65,12 @@ export default function AccountPage() {
     }
 
     setIsSavingPassword(true);
-    try {
-      const updated = await updateProfile(user.id, { password });
-      if (updated) {
-        toast.success("Password updated successfully");
-        setPassword("");
-        setConfirmPassword("");
-      } else {
-        toast.error("Failed to update password");
-      }
-    } catch (error) {
-      toast.error("An error occurred while updating password");
-    } finally {
-      setIsSavingPassword(false);
+    const updated = await updateUserPassword(password);
+    if (updated) {
+      setPassword("");
+      setConfirmPassword("");
     }
+    setIsSavingPassword(false);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,19 +90,8 @@ export default function AccountPage() {
     }
 
     setIsUploadingAvatar(true);
-    try {
-      const updated = await uploadAvatar(file);
-      if (updated) {
-        setUser(updated);
-        toast.success("Profile image updated");
-      } else {
-        toast.error("Failed to upload image");
-      }
-    } catch (error) {
-      toast.error("An error occurred while uploading image");
-    } finally {
-      setIsUploadingAvatar(false);
-    }
+    await uploadUserAvatar(file);
+    setIsUploadingAvatar(false);
   };
 
   if (isLoading) {

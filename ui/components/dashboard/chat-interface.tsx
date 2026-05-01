@@ -67,6 +67,7 @@ export function ChatInterface({ bot, userId, className }: ChatInterfaceProps) {
     // Optimistic update
     const tempUserMsg: Message = {
       id: Date.now().toString(),
+      chatId: chatId,
       role: "USER",
       content: userMessageContent,
       createdAt: new Date().toISOString(),
@@ -155,16 +156,15 @@ export function ChatInterface({ bot, userId, className }: ChatInterfaceProps) {
                     </AvatarFallback>
                   </Avatar>
                   <div
-                    className={`max-w-[80%] px-4 py-2.5 text-sm ${
-                      msg.role === "USER"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted border-border/60 border"
-                    }`}
+                    className={`max-w-[80%] px-4 py-2.5 text-sm ${msg.role === "USER"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted border-border/60 border"
+                      }`}
                   >
                     {msg.content}
-                    {msg.metadata?.source_chunks && (
+                    {!!msg.metadata?.source_chunks && (
                       <div className="border-border/20 mt-2 border-t pt-2 text-[9px] font-bold tracking-widest uppercase opacity-60">
-                        Sourced from {msg.metadata.source_chunks} chunks
+                        Sourced from {msg.metadata.source_chunks as number} chunks
                       </div>
                     )}
                   </div>
