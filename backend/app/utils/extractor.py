@@ -5,12 +5,16 @@ Includes specialized cleaning logic for each source type.
 
 import httpx
 import re
+import asyncio
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
 import docx
 import pandas as pd
 from pptx import Presentation
 from unstructured.partition.auto import partition
+from playwright.async_api import async_playwright
+from app.core.logging import logger
+from urllib.parse import urlparse
 
 
 def clean_pdf_text(text: str) -> str:
@@ -31,26 +35,43 @@ def clean_pdf_text(text: str) -> str:
 def clean_url_text(soup: BeautifulSoup) -> str:
     """Clean text extracted from a URL: removes nav, footer, ads, and boilerplate."""
     # 1. Removal of non-content elements
-    for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe"]):
+    # We remove nav/footer/header but keep sections and the main body
+    for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe", "input"]):
         element.decompose()
         
-    # 2. Extract text from primary containers if they exist (common selectors for actual content)
+    # 2. Extract text from primary containers
+    # Added '.page' and 'section' as common React/Next.js patterns
     main_content = soup.select_one(
-        "main, article, [role='main'], #content, .content, .post-content, .entry-content"
+        "main, article, [role='main'], #content, .content, .page, #main, .main"
     )
+    
+    text = ""
     if main_content:
-        text = main_content.get_text(separator="\n")
-    else:
-        fallback_nodes = soup.select("h1, h2, h3, p, li")
-        if fallback_nodes:
-            text = "\n".join(node.get_text(" ", strip=True) for node in fallback_nodes)
-        else:
-            text = soup.get_text(separator="\n")
+        # If we found a primary container, get its text
+        text = main_content.get_text(separator="\n", strip=True)
+    
+    # 3. Validation & Fallback: If primary content is missing or too short, 
+    # look for sections which are common in landing pages.
+    if len(text.split()) < 30:
+        sections = soup.select("section, div[class*='section'], div[class*='container']")
+        if sections:
+            section_texts = []
+            for s in sections:
+                s_text = s.get_text(separator=" ", strip=True)
+                if len(s_text.split()) > 3: # Ignore tiny fragments
+                    section_texts.append(s_text)
+            if section_texts:
+                text = "\n\n".join(section_texts)
         
-    # 3. Clean up whitespace and empty lines
+    # 4. Final Fallback: just get everything that's left in the body
+    if len(text.split()) < 15:
+        body = soup.find('body')
+        text = body.get_text(separator="\n", strip=True) if body else soup.get_text(separator="\n", strip=True)
+        
+    # 5. Clean up whitespace and empty lines
     lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = "\n".join(chunk for chunk in chunks if chunk)
+    # Filter out very short lines that are likely just UI fragments or noise
+    text = "\n".join(line for line in lines if len(line) > 5)
     
     return text.strip()
 
@@ -134,7 +155,110 @@ def extract_text_universal(file_path: str) -> str:
 
 
 async def extract_text_from_url(url: str) -> str:
-    """Scrape, extract, and specifically clean main content from a URL asynchronously."""
+    """
+    Scrape, extract, and specifically clean main content from a URL.
+    Refactored for stability, SPA recovery, and memory management.
+    """
+    browser = None
+    try:
+        async with async_playwright() as p:
+            # Launch with optimal flags for performance and bot evasion
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--disable-dev-shm-usage", "--no-sandbox"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={'width': 1280, 'height': 900}
+            )
+            page = await context.new_page()
+            
+            logger.info(f"Scraping URL (Structural): {url}")
+            
+            # 1. Navigation with retry/timeout logic
+            try:
+                response = await page.goto(url, wait_until="networkidle", timeout=45000)
+            except Exception as e:
+                logger.warning(f"Initial navigation timed out for {url}, attempting capture anyway. Error: {e}")
+                response = None
+
+            # 2. SPA Recovery: Handle 404/Empty pages common in React/Vercel
+            if not response or response.status == 404:
+                parsed_url = urlparse(url)
+                base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+                path = parsed_url.path.strip('/')
+                
+                if path:
+                    logger.info(f"Direct hit 404 or failed. Recovery via base: {base_url}")
+                    await page.goto(base_url, wait_until="networkidle", timeout=30000)
+                    
+                    # Exact Link Search: finds the link to the subpage on the home page
+                    # Matches /flowers, flowers, or full URL
+                    link = page.locator(f"a[href='/#/{path}'], a[href='/{path}'], a[href='{path}']").first
+                    if await link.count() > 0:
+                        logger.info(f"Found recovery link for {path}, clicking...")
+                        await link.click()
+                        await page.wait_for_load_state("networkidle")
+                    else:
+                        logger.warning(f"Recovery link not found for path: {path}")
+
+            # 3. Handle typical 'Newsletter/Cookie' popups that might block rendering
+            try:
+                # Press 'Escape' to close simple modals/popups
+                await page.keyboard.press("Escape")
+            except: pass
+
+            # 4. Smart Dynamic Scroll
+            # Adjusts speed based on page length to ensure lazy content loads
+            await page.evaluate("""
+                async () => {
+                    await new Promise((resolve) => {
+                        let totalHeight = 0;
+                        let distance = 250;
+                        let timer = setInterval(() => {
+                            let scrollHeight = document.body.scrollHeight;
+                            window.scrollBy(0, distance);
+                            totalHeight += distance;
+                            // Stop if we hit the bottom OR a reasonable max height for RAG (8000px)
+                            if(totalHeight >= scrollHeight || totalHeight > 8000){
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                }
+            """)
+            
+            # 5. Wait for Hydration
+            await asyncio.sleep(2)
+            
+            # 6. Capture
+            content = await page.content()
+            soup = BeautifulSoup(content, "html.parser")
+            text = clean_url_text(soup)
+            
+            # If Playwright fails to get substantial content, try the static fallback
+            if len(text.split()) < 10:
+                logger.warning(f"Playwright results sparse for {url}, trying static fallback")
+                return await _extract_text_static(url)
+                
+            return text
+
+    except Exception as e:
+        logger.error(f"Scraper structural failure for {url}: {e}")
+        return await _extract_text_static(url)
+    
+    finally:
+        # CRITICAL: Prevent memory leaks by ensuring browser is closed
+        if browser:
+            try:
+                await browser.close()
+            except Exception as close_err:
+                logger.error(f"Error closing browser: {close_err}")
+
+
+async def _extract_text_static(url: str) -> str:
+    """Fallback static scraper for URLs when Playwright fails or is unnecessary."""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -156,7 +280,7 @@ async def extract_text_from_url(url: str) -> str:
         soup = BeautifulSoup(response.text, "html.parser")
         return clean_url_text(soup)
     except Exception as e:
-        print(f"Error scraping URL: {e}")
+        logger.error(f"Static fallback scraping failed for {url}: {e}")
         return ""
 
 

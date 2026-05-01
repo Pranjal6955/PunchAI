@@ -237,8 +237,9 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
         return [r['content'] for r in results]
 
     try:
-        # P0 Enhancement: 1.5s timeout to prevent the 8s stalling observed in benchmarks
-        return await asyncio.wait_for(_fetch(), timeout=1.5)
+        # Increased timeout to 3.0s (was 1.5s) to handle larger datasets
+        # and added GIN indexes to document_chunks.content for performance.
+        return await asyncio.wait_for(_fetch(), timeout=3.0)
     except (asyncio.TimeoutError, Exception) as e:
         logger.warning(f"Keyword search (FTS) bypassed or failed: {type(e).__name__}")
         return []
