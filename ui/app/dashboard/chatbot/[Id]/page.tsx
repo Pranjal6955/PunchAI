@@ -3,14 +3,10 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  getBot,
-  getProfile,
   updateBot,
   deleteBot,
-  getDataSources,
   generateBotApiKey,
   Bot,
-  DataSource,
 } from "@/lib/api-session";
 import { toast } from "sonner";
 import { useUser } from "@/hooks/use-user";
@@ -31,7 +27,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IntegrationTab } from "@/components/chatbot/IntegrationTab";
 import { WidgetCustomizer } from "@/components/chatbot/WidgetCustomizer";
@@ -57,19 +52,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function AgentDashboard() {
   const { Id } = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isLoading: userLoading } = useUser();
-  const { bot, isLoading: botLoading, mutate: mutateBot } = useBot(Id as string);
+  const { bot, isLoading: botLoading } = useBot(Id as string);
   const { dataSources, isLoading: sourcesLoading } = useDataSources(Id as string);
 
-  const [loading, setLoading] = React.useState(true);
-  const [updating, setUpdating] = React.useState(false);
-  const [deleting, setDeleting] = React.useState(false);
-
-  // Form states
+  // Form states - keeping these as useState for immediate UI feedback during typing
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [persona, setPersona] = React.useState("");
@@ -77,11 +70,8 @@ export default function AgentDashboard() {
   const [selectedTemplate, setSelectedTemplate] = React.useState<string | undefined>(undefined);
   const [showApiKey, setShowApiKey] = React.useState(false);
 
+  // Initialize form state when bot data is loaded
   React.useEffect(() => {
-    if (!botLoading && !bot && !loading) {
-      toast.error("Agent not found");
-      router.push("/dashboard/chatbot");
-    }
     if (bot) {
       setName(bot.name);
       setDescription(bot.description || "");
@@ -90,80 +80,65 @@ export default function AgentDashboard() {
       setCustomCss(bot.customCss || DEFAULT_CSS);
       const matchedTemplate = PERSONA_TEMPLATES.find((t) => t.value === loadedPersona);
       setSelectedTemplate(matchedTemplate?.label ?? undefined);
-      setLoading(false);
     }
-  }, [bot, botLoading, router]);
+  }, [bot]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Partial<Omit<Bot, "id">>) => updateBot(Id as string, data),
+    onSuccess: (updatedBot) => {
+      if (updatedBot) {
+        queryClient.setQueryData(["bot", Id], updatedBot);
+        queryClient.invalidateQueries({ queryKey: ["bots-list"] });
+        toast.success("Agent updated successfully");
+      }
+    },
+    onError: () => toast.error("Failed to update agent"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteBot(Id as string),
+    onSuccess: (success) => {
+      if (success) {
+        queryClient.invalidateQueries({ queryKey: ["bots-list"] });
+        toast.success("Agent deleted successfully");
+        router.push("/dashboard/chatbot");
+      }
+    },
+    onError: () => toast.error("Failed to delete agent"),
+  });
+
+  const apiKeyMutation = useMutation({
+    mutationFn: () => generateBotApiKey(Id as string),
+    onSuccess: (updatedBot) => {
+      if (updatedBot) {
+        queryClient.setQueryData(["bot", Id], updatedBot);
+        setShowApiKey(true);
+        toast.success("API Key generated successfully");
+      }
+    },
+    onError: () => toast.error("Failed to generate API Key"),
+  });
 
   const handleUpdate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!bot || !Id) return;
-
-    setUpdating(true);
-    try {
-      const updatedBot = await updateBot(Id as string, {
-        name,
-        description,
-        botPersona: persona,
-        customCss: customCss,
-      });
-
-      if (updatedBot) {
-        mutateBot(updatedBot, false);
-        toast.success("Agent updated successfully");
-      } else {
-        toast.error("Failed to update agent");
-      }
-    } catch (error) {
-      console.error("Update error:", error);
-      toast.error("An error occurred while updating");
-    } finally {
-      setUpdating(false);
-    }
+    updateMutation.mutate({
+      name,
+      description,
+      botPersona: persona,
+      customCss: customCss,
+    });
   };
 
   const handleDelete = async () => {
-    if (!bot || !Id) return;
-    if (!confirm("Are you sure you want to delete this agent? This action cannot be undone."))
-      return;
-
-    setDeleting(true);
-    try {
-      const success = await deleteBot(Id as string);
-      if (success) {
-        toast.success("Agent deleted successfully");
-        router.push("/dashboard/chatbot");
-      } else {
-        toast.error("Failed to delete agent");
-      }
-    } catch (error) {
-      console.error("Delete error:", error);
-      toast.error("An error occurred while deleting");
-    } finally {
-      setDeleting(false);
-    }
+    if (!confirm("Are you sure you want to delete this agent? This action cannot be undone.")) return;
+    deleteMutation.mutate();
   };
 
   const handleGenerateApiKey = async () => {
-    if (!Id) return;
-    setUpdating(true);
-    try {
-      const updatedBot = await generateBotApiKey(Id as string);
-      if (updatedBot) {
-        mutateBot(updatedBot, false);
-        setShowApiKey(true);
-        toast.success("API Key generated successfully");
-      } else {
-        toast.error("Failed to generate API Key");
-      }
-    } catch (error) {
-      console.error("Generate API Key error:", error);
-      toast.error("An error occurred while generating API Key");
-    } finally {
-      setUpdating(false);
-    }
+    apiKeyMutation.mutate();
   };
 
-  if (loading) {
+  if (botLoading || userLoading) {
     return (
       <div className="animate-pulse space-y-8 p-8">
         <Skeleton className="h-10 w-48" />
@@ -197,7 +172,6 @@ export default function AgentDashboard() {
                   ? `/dashboard/dataSource?botId=${Id}`
                   : `/dashboard/chatbot/${Id}/Playground`
               }
-              className=""
             >
               <Button className="rounded-none px-6">
                 {dataSources.length === 0 ? "Add Data to Test" : "Test your Agent"}
@@ -207,9 +181,9 @@ export default function AgentDashboard() {
               variant="destructive"
               className="rounded-none px-6"
               onClick={handleDelete}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
             >
-              {deleting ? (
+              {deleteMutation.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -344,10 +318,10 @@ export default function AgentDashboard() {
                     <Button
                       type="submit"
                       form="update-bot-form"
-                      disabled={updating}
+                      disabled={updateMutation.isPending}
                       className="h-11 rounded-none px-8"
                     >
-                      {updating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       Save Changes
                     </Button>
                   </CardFooter>
@@ -440,7 +414,7 @@ export default function AgentDashboard() {
               customCss={customCss}
               setCustomCss={setCustomCss}
               handleUpdate={handleUpdate}
-              updating={updating}
+              updating={updateMutation.isPending}
               showApiKey={showApiKey}
               setShowApiKey={setShowApiKey}
               handleGenerateApiKey={handleGenerateApiKey}
@@ -449,7 +423,7 @@ export default function AgentDashboard() {
           </TabsContent>
 
           <TabsContent value="widget" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">
-            <WidgetCustomizer bot={bot} onUpdate={(updatedBot) => mutateBot(updatedBot, false)} />
+            <WidgetCustomizer bot={bot} onUpdate={(updatedBot) => queryClient.setQueryData(["bot", Id], updatedBot)} />
           </TabsContent>
 
           <TabsContent value="review" className="animate-in fade-in slide-in-from-bottom-2 space-y-8 duration-300">

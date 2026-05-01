@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getBots, Bot, deleteBot, getProfile } from "@/lib/api-session";
+import { useState } from "react";
+import { BotCard } from "@/components/dashboard/bot-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, LayoutGrid, List, Bot as BotIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CreateAgentDialog } from "@/components/dashboard/create-agent-dialog";
-import { BotCard } from "@/components/dashboard/bot-card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useBots } from "@/hooks/use-bots";

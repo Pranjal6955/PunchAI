@@ -1,20 +1,15 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
-    getAllOwnerChats,
-    getBots,
-    getChat,
-    deleteChat,
     Chat,
-    Bot,
     Message,
+    Bot,
 } from "@/lib/api-session";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
     Search,
     X,
@@ -29,6 +24,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useChats } from "@/hooks/use-chats";
+import { useChatDetails } from "@/hooks/use-chat-details";
+import { useBots } from "@/hooks/use-bots";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -61,7 +59,6 @@ const SENTIMENT_CONFIG: Record<
     string,
     { label: string; color: string; bg: string }
 > = {
-    // ── Canonical values ─────────────────────────────────────────────────────
     Happy: {
         label: "Happy",
         color: "text-emerald-400",
@@ -82,7 +79,6 @@ const SENTIMENT_CONFIG: Record<
         color: "text-blue-400",
         bg: "bg-blue-400/10",
     },
-    // ── Legacy aliases (old DB rows stored before this fix) ──────────────────
     POSITIVE: { label: "Happy", color: "text-emerald-400", bg: "bg-emerald-400/10" },
     NEGATIVE: { label: "Frustrated", color: "text-red-400", bg: "bg-red-400/10" },
     NEUTRAL: { label: "Neutral", color: "text-foreground/60", bg: "bg-muted/50" },
@@ -97,7 +93,6 @@ function SentimentBadge({ sentiment }: { sentiment?: string | null }) {
             </span>
         );
     }
-    // Look up exact key first, then try title-cased version as fallback
     const cfg =
         SENTIMENT_CONFIG[sentiment] ??
         SENTIMENT_CONFIG[sentiment.charAt(0).toUpperCase() + sentiment.slice(1).toLowerCase()] ??
@@ -152,24 +147,12 @@ interface DrawerProps {
 }
 
 function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
-    const [chat, setChat] = useState<Chat | null>(null);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        if (!chatId) return;
-        setLoading(true);
-        setChat(null);
-        getChat(chatId)
-            .then(setChat)
-            .catch(() => toast.error("Failed to load conversation"))
-            .finally(() => setLoading(false));
-    }, [chatId]);
+    const { chat, isLoading: loading } = useChatDetails(chatId);
 
     return (
         <AnimatePresence>
             {chatId && (
                 <>
-                    {/* Backdrop */}
                     <motion.div
                         key="backdrop"
                         initial={{ opacity: 0 }}
@@ -179,7 +162,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                         className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
                         onClick={onClose}
                     />
-                    {/* Drawer panel */}
                     <motion.div
                         key="drawer"
                         initial={{ x: "100%" }}
@@ -188,7 +170,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                         transition={{ type: "spring", stiffness: 320, damping: 32 }}
                         className="border-border/60 bg-background fixed top-0 right-0 z-50 flex h-full w-full max-w-xl flex-col border-l"
                     >
-                        {/* Drawer Header */}
                         <div className="border-border/40 flex items-start justify-between gap-4 border-b px-6 py-5">
                             <div className="min-w-0 space-y-1">
                                 <p className="text-muted-foreground text-[10px] font-semibold tracking-widest uppercase">
@@ -211,7 +192,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                             </button>
                         </div>
 
-                        {/* Meta strip */}
                         {!loading && chat && (
                             <div className="border-border/40 bg-muted/20 flex flex-wrap items-center gap-x-6 gap-y-1 border-b px-6 py-3">
                                 <span className="text-muted-foreground text-xs">
@@ -237,7 +217,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                             </div>
                         )}
 
-                        {/* AI Summary */}
                         {!loading && chat?.summary && (
                             <div className="border-border/40 border-b px-6 py-4">
                                 <p className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-widest uppercase">
@@ -249,7 +228,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
                             </div>
                         )}
 
-                        {/* Messages */}
                         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
@@ -347,8 +325,6 @@ function ConversationDrawer({ chatId, botName, onClose }: DrawerProps) {
 type FilterType = "all" | "internal" | "external";
 type SortKey = "updatedAt" | "createdAt" | "sentiment";
 
-import useSWR from "swr";
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ChatLogsPage() {
@@ -358,28 +334,18 @@ export default function ChatLogsPage() {
 
     const isExternalParam = filterType === "external" ? true : filterType === "internal" ? false : undefined;
 
-    const { data: chats = [], error: chatsError, mutate: mutateChats } = useSWR(
-        ["chats", filterType],
-        () => getAllOwnerChats(isExternalParam)
-    );
-    const { data: bots = [], error: botsError } = useSWR("all-bots", getBots);
+    const { chats: chatsData, isLoading: chatsLoading, mutate: mutateChats, removeChat, isDeleting } = useChats(isExternalParam);
+    const { bots: botsData, isLoading: botsLoading } = useBots();
 
-    const [loadingInitial, setLoadingInitial] = useState(true);
+    const chats = chatsData as Chat[];
+    const bots = botsData as Bot[];
+
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    useEffect(() => {
-        if ((chats.length > 0 || chatsError !== undefined) && (bots.length > 0 || botsError !== undefined)) {
-            setLoadingInitial(false);
-        }
-    }, [chats, chatsError, bots, botsError]);
-
-    const fetchData = async () => {
-        await mutateChats();
-    };
+    const loadingInitial = chatsLoading || botsLoading;
 
     // ── Bot name lookup ────────────────────────────────────────────────────────
-    const botMap = useMemo(
+    const botMap = useMemo<Map<string, string>>(
         () => new Map(bots.map((b) => [b.id, b.name])),
         [bots],
     );
@@ -387,10 +353,9 @@ export default function ChatLogsPage() {
     const getBotName = (botId: string) => botMap.get(botId) ?? "Unknown Agent";
 
     // ── Selected chat bot name ─────────────────────────────────────────────────
-    const selectedBotName = useMemo(() => {
+    const selectedBotName = useMemo<string>(() => {
         const chat = chats.find((c) => c.id === selectedChatId);
         return chat ? getBotName(chat.botId) : "";
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedChatId, botMap, chats]);
 
     // ── Metrics ────────────────────────────────────────────────────────────────
@@ -398,7 +363,7 @@ export default function ChatLogsPage() {
     const externalCount = chats.filter((c) => c.isExternal).length;
     const sentiments = chats.filter((c) => c.sentiment);
     const positiveCount = sentiments.filter(
-        (c) => c.sentiment?.toUpperCase() === "POSITIVE",
+        (c) => c.sentiment?.toUpperCase() === "HAPPY" || c.sentiment?.toUpperCase() === "POSITIVE",
     ).length;
     const sentimentRatio =
         sentiments.length > 0
@@ -406,8 +371,6 @@ export default function ChatLogsPage() {
             : null;
 
     // ── Filtered + sorted list ─────────────────────────────────────────────────
-    // isExternal filtering is handled server-side via the API param.
-    // Only apply search and sort client-side.
     const displayChats = useMemo(() => {
         let list = [...chats];
 
@@ -432,36 +395,16 @@ export default function ChatLogsPage() {
         });
 
         return list;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chats, search, sortKey, botMap]);
 
     // ── Delete handler ─────────────────────────────────────────────────────────
     const handleDelete = async (chatId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (
-            !confirm(
-                "Delete this conversation? This action cannot be undone.",
-            )
-        )
-            return;
-        setDeletingId(chatId);
-        try {
-            const ok = await deleteChat(chatId);
-            if (ok) {
-                await mutateChats();
-                if (selectedChatId === chatId) setSelectedChatId(null);
-                toast.success("Conversation deleted");
-            } else {
-                toast.error("Failed to delete conversation");
-            }
-        } catch {
-            toast.error("An error occurred");
-        } finally {
-            setDeletingId(null);
-        }
+        if (!confirm("Delete this conversation? This action cannot be undone.")) return;
+        await removeChat(chatId);
+        if (selectedChatId === chatId) setSelectedChatId(null);
     };
 
-    // ─── Loading skeleton ───────────────────────────────────────────────────────
     if (loadingInitial && chats.length === 0) {
         return (
             <div className="min-h-full w-full space-y-8 p-4 md:p-6 lg:p-8">
@@ -505,27 +448,16 @@ export default function ChatLogsPage() {
     return (
         <>
             <div className="min-h-full w-full space-y-8 p-4 pb-20 md:p-6 lg:p-8">
-                {/* ── Header ─────────────────────────────────────────────────────────── */}
                 <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                     <div className="space-y-1">
-                        <h1 className="text-3xl font-semibold tracking-tight">
-                            Chat Logs
-                        </h1>
-                        <p className="text-muted-foreground text-base">
-                            All conversations across your AI agents.
-                        </p>
+                        <h1 className="text-3xl font-semibold tracking-tight">Chat Logs</h1>
+                        <p className="text-muted-foreground text-base">All conversations across your AI agents.</p>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-none"
-                        onClick={() => void fetchData()}
-                    >
+                    <Button variant="outline" size="sm" className="rounded-none" onClick={() => void mutateChats()}>
                         Refresh
                     </Button>
                 </div>
 
-                {/* ── Metrics ────────────────────────────────────────────────────────── */}
                 <div className="grid gap-4 md:grid-cols-3">
                     <MetricCard
                         label="Total Conversations"
@@ -536,30 +468,18 @@ export default function ChatLogsPage() {
                     <MetricCard
                         label="External Traffic"
                         value={externalCount}
-                        sub={
-                            totalConversations > 0
-                                ? `${Math.round((externalCount / totalConversations) * 100)}% of all conversations`
-                                : "No conversations yet"
-                        }
+                        sub={totalConversations > 0 ? `${Math.round((externalCount / totalConversations) * 100)}% of all conversations` : "No conversations yet"}
                         icon={<Globe className="h-4 w-4" />}
                     />
                     <MetricCard
                         label="Positive Sentiment"
-                        value={
-                            sentimentRatio !== null ? `${sentimentRatio}%` : "—"
-                        }
-                        sub={
-                            sentiments.length > 0
-                                ? `${sentiments.length} conversations analyzed`
-                                : "Not enough data"
-                        }
+                        value={sentimentRatio !== null ? `${sentimentRatio}%` : "—"}
+                        sub={sentiments.length > 0 ? `${sentiments.length} conversations analyzed` : "Not enough data"}
                         icon={<TrendingUp className="h-4 w-4" />}
                     />
                 </div>
 
-                {/* ── Toolbar ────────────────────────────────────────────────────────── */}
                 <div className="bg-muted/30 border-border/40 flex flex-col items-start justify-between gap-4 border p-2 backdrop-blur-sm lg:flex-row lg:items-center">
-                    {/* Search */}
                     <div className="group relative w-full lg:max-w-sm">
                         <Search className="text-muted-foreground group-focus-within:text-primary absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transition-colors" />
                         <Input
@@ -571,7 +491,6 @@ export default function ChatLogsPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Filter chips */}
                         <div className="border-border/60 bg-background flex border">
                             {(["all", "internal", "external"] as FilterType[]).map((f) => (
                                 <button
@@ -579,9 +498,7 @@ export default function ChatLogsPage() {
                                     onClick={() => setFilterType(f)}
                                     className={cn(
                                         "px-3 py-1.5 text-[10px] font-semibold tracking-widest uppercase transition-colors",
-                                        filterType === f
-                                            ? "bg-secondary text-foreground"
-                                            : "text-muted-foreground hover:text-foreground",
+                                        filterType === f ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
                                     )}
                                 >
                                     {f}
@@ -589,7 +506,6 @@ export default function ChatLogsPage() {
                             ))}
                         </div>
 
-                        {/* Sort */}
                         <div className="border-border/60 bg-background relative border">
                             <select
                                 value={sortKey}
@@ -605,20 +521,16 @@ export default function ChatLogsPage() {
                     </div>
                 </div>
 
-                {/* ── Table ──────────────────────────────────────────────────────────── */}
                 {displayChats.length === 0 ? (
                     <div className="border-border/40 flex flex-col items-center justify-center gap-3 border border-dashed py-24 text-center">
                         <MessageSquare className="text-muted-foreground/30 h-10 w-10" />
                         <h3 className="text-lg font-medium">No conversations found</h3>
                         <p className="text-muted-foreground max-w-sm text-sm">
-                            {search || filterType !== "all"
-                                ? "Try changing your search or filter."
-                                : "Conversations will appear here once users start chatting with your agents."}
+                            {search || filterType !== "all" ? "Try changing your search or filter." : "Conversations will appear here once users start chatting with your agents."}
                         </p>
                     </div>
                 ) : (
                     <div className="border-border/60 overflow-hidden border">
-                        {/* Table header */}
                         <div className="border-border/60 text-muted-foreground bg-muted/30 grid grid-cols-12 gap-4 border-b px-6 py-3 text-[10px] font-semibold tracking-widest uppercase">
                             <div className="col-span-4">Title / Agent</div>
                             <div className="col-span-2">Type</div>
@@ -627,7 +539,6 @@ export default function ChatLogsPage() {
                             <div className="col-span-2 text-right">Actions</div>
                         </div>
 
-                        {/* Table rows */}
                         <AnimatePresence initial={false}>
                             {displayChats.map((chat, index) => (
                                 <motion.div
@@ -642,56 +553,39 @@ export default function ChatLogsPage() {
                                         selectedChatId === chat.id && "bg-muted/20",
                                     )}
                                 >
-                                    {/* Title + agent */}
                                     <div className="col-span-4 min-w-0">
-                                        <p className="truncate text-sm font-medium">
-                                            {chat.title ?? "Untitled Conversation"}
-                                        </p>
-                                        <p className="text-muted-foreground truncate text-xs">
-                                            {getBotName(chat.botId)}
-                                        </p>
+                                        <p className="truncate text-sm font-medium">{chat.title ?? "Untitled Conversation"}</p>
+                                        <p className="text-muted-foreground truncate text-xs">{getBotName(chat.botId)}</p>
                                     </div>
 
-                                    {/* Type */}
                                     <div className="col-span-2">
                                         {chat.isExternal ? (
-                                            <Badge
-                                                variant="outline"
-                                                className="rounded-none border-blue-400/30 bg-blue-400/10 text-[10px] font-semibold tracking-widest text-blue-400 uppercase"
-                                            >
+                                            <Badge variant="outline" className="rounded-none border-blue-400/30 bg-blue-400/10 text-[10px] font-semibold tracking-widest text-blue-400 uppercase">
                                                 External
                                             </Badge>
                                         ) : (
-                                            <Badge
-                                                variant="outline"
-                                                className="text-muted-foreground rounded-none text-[10px] font-semibold tracking-widest uppercase"
-                                            >
+                                            <Badge variant="outline" className="text-muted-foreground rounded-none text-[10px] font-semibold tracking-widest uppercase">
                                                 Internal
                                             </Badge>
                                         )}
                                     </div>
 
-                                    {/* Sentiment */}
                                     <div className="col-span-2">
                                         <SentimentBadge sentiment={chat.sentiment} />
                                     </div>
 
-                                    {/* Last active */}
                                     <div className="col-span-2">
                                         <p className="text-sm">{relativeTime(chat.updatedAt)}</p>
-                                        <p className="text-muted-foreground text-xs">
-                                            {formatDate(chat.updatedAt)}
-                                        </p>
+                                        <p className="text-muted-foreground text-xs">{formatDate(chat.updatedAt)}</p>
                                     </div>
 
-                                    {/* Actions */}
                                     <div className="col-span-2 flex justify-end">
                                         <Button
                                             variant="ghost"
                                             size="icon"
                                             className="text-muted-foreground hover:text-destructive h-8 w-8 rounded-none"
                                             onClick={(e) => void handleDelete(chat.id, e)}
-                                            disabled={deletingId === chat.id}
+                                            disabled={isDeleting}
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
                                         </Button>
@@ -700,16 +594,10 @@ export default function ChatLogsPage() {
                             ))}
                         </AnimatePresence>
 
-                        {/* Footer count */}
                         <div className="border-border/40 text-muted-foreground/60 flex items-center justify-between border-t px-6 py-3 text-xs">
-                            <span>
-                                Showing {displayChats.length} of {totalConversations} conversations
-                            </span>
+                            <span>Showing {displayChats.length} of {totalConversations} conversations</span>
                             {search && (
-                                <button
-                                    onClick={() => setSearch("")}
-                                    className="hover:text-foreground flex items-center gap-1 transition-colors"
-                                >
+                                <button onClick={() => setSearch("")} className="hover:text-foreground flex items-center gap-1 transition-colors">
                                     <X className="h-3 w-3" />
                                     Clear search
                                 </button>
@@ -719,7 +607,6 @@ export default function ChatLogsPage() {
                 )}
             </div>
 
-            {/* ── Slide-over drawer ────────────────────────────────────────────────── */}
             <ConversationDrawer
                 chatId={selectedChatId}
                 botName={selectedBotName}

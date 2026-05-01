@@ -1,32 +1,36 @@
-import useSWR from "swr";
-import { getDataSources, deleteDataSource } from "@/lib/api-session";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getDataSources, deleteDataSource, DataSource } from "@/lib/api-session";
 import { toast } from "sonner";
 
 export function useDataSources(botId: string | null) {
-    const { data: dataSources = [], error, mutate, isLoading } = useSWR(
-        botId ? ["data-sources", botId] : null,
-        () => (botId ? getDataSources(botId) : [])
-    );
+    const queryClient = useQueryClient();
 
-    const removeDataSource = async (dsId: string) => {
-        try {
-            const success = await deleteDataSource(dsId);
+    const { data: dataSources = [], error, isLoading, refetch } = useQuery<DataSource[]>({
+        queryKey: ["data-sources", botId],
+        queryFn: () => (botId ? getDataSources(botId) : Promise.resolve([])),
+        enabled: !!botId,
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteDataSource,
+        onSuccess: (success, dsId) => {
             if (success) {
-                mutate(dataSources.filter(ds => ds.id !== dsId), false);
+                queryClient.setQueryData(["data-sources", botId], (old: any) => 
+                    old ? old.filter((ds: any) => ds.id !== dsId) : []
+                );
                 toast.success("Data source removed");
-                return true;
             }
-        } catch (e) {
+        },
+        onError: () => {
             toast.error("Failed to delete data source");
         }
-        return false;
-    };
+    });
 
     return {
         dataSources,
         error,
         isLoading,
-        removeDataSource,
-        mutate,
+        removeDataSource: deleteMutation.mutateAsync,
+        mutate: refetch,
     };
 }

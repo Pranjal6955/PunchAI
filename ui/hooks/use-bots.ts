@@ -1,29 +1,35 @@
-import useSWR from "swr";
-import { getBots, deleteBot } from "@/lib/api-session";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getBots, deleteBot, Bot } from "@/lib/api-session";
 import { toast } from "sonner";
 
 export function useBots() {
-    const { data: bots = [], error, mutate, isLoading } = useSWR("bots-list", () => getBots());
+    const queryClient = useQueryClient();
 
-    const removeBot = async (botId: string) => {
-        try {
-            const success = await deleteBot(botId);
+    const { data: bots = [], error, isLoading, refetch } = useQuery<Bot[]>({
+        queryKey: ["bots-list"],
+        queryFn: () => getBots(),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteBot,
+        onSuccess: (success, botId) => {
             if (success) {
-                mutate(bots.filter(b => b.id !== botId), false);
+                queryClient.setQueryData(["bots-list"], (old: any) => 
+                    old ? old.filter((b: any) => b.id !== botId) : []
+                );
                 toast.success("Agent deleted successfully");
-                return true;
             }
-        } catch (e) {
+        },
+        onError: () => {
             toast.error("Failed to delete agent");
         }
-        return false;
-    };
+    });
 
     return {
         bots,
         error,
         isLoading,
-        removeBot,
-        mutate,
+        removeBot: deleteMutation.mutateAsync,
+        mutate: refetch,
     };
 }

@@ -1,57 +1,60 @@
-import useSWR from "swr";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProfile, updateProfile, uploadAvatar } from "@/lib/api-session";
 import { toast } from "sonner";
 
 export function useUser() {
-    const { data: user, error, mutate, isLoading } = useSWR("user-profile", getProfile);
+    const queryClient = useQueryClient();
 
-    const updateUserName = async (name: string) => {
-        if (!user) return;
-        try {
-            const updated = await updateProfile(user.id, { name });
+    const { data: user, error, isLoading, refetch } = useQuery({
+        queryKey: ["user-profile"],
+        queryFn: getProfile,
+    });
+
+    const updateProfileMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string; data: any }) => updateProfile(id, data),
+        onSuccess: (updated) => {
             if (updated) {
-                mutate(updated, false);
+                queryClient.setQueryData(["user-profile"], updated);
                 toast.success("Profile updated");
-                return updated;
             }
-        } catch (e) {
+        },
+        onError: () => {
             toast.error("Failed to update profile");
         }
-    };
+    });
 
-    const updateUserPassword = async (password: string) => {
-        if (!user) return;
-        try {
-            const updated = await updateProfile(user.id, { password });
+    const updatePasswordMutation = useMutation({
+        mutationFn: ({ id, password }: { id: string; password: string }) => updateProfile(id, { password }),
+        onSuccess: (updated) => {
             if (updated) {
                 toast.success("Password updated");
-                return updated;
             }
-        } catch (e) {
+        },
+        onError: () => {
             toast.error("Failed to update password");
         }
-    };
+    });
 
-    const uploadUserAvatar = async (file: File) => {
-        try {
-            const updated = await uploadAvatar(file);
+    const uploadAvatarMutation = useMutation({
+        mutationFn: uploadAvatar,
+        onSuccess: (updated) => {
             if (updated) {
-                mutate(updated, false);
+                queryClient.setQueryData(["user-profile"], updated);
                 toast.success("Avatar updated");
-                return updated;
             }
-        } catch (e) {
+        },
+        onError: () => {
             toast.error("Failed to upload avatar");
         }
-    };
+    });
 
     return {
         user,
         error,
         isLoading,
-        updateUserName,
-        updateUserPassword,
-        uploadUserAvatar,
-        mutate,
+        updateUserName: (name: string) => user && updateProfileMutation.mutateAsync({ id: user.id, data: { name } }),
+        updateUserPassword: (password: string) => user && updatePasswordMutation.mutateAsync({ id: user.id, password }),
+        uploadUserAvatar: uploadAvatarMutation.mutateAsync,
+        mutate: refetch,
     };
 }
