@@ -122,7 +122,14 @@ async def add_message(
         history=history
     )
     
-    ai_text, usage = await generate_llm_response(structured_prompt, model=payload.model)
+    try:
+        ai_text, usage = await generate_llm_response(structured_prompt, model=payload.model)
+    except Exception as exc:
+        logger.error(f"Failed to generate AI response: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="The AI engine is currently unavailable. Please try again in a moment."
+        )
 
     # 4. Save Assistant Message
     assistant_msg = await db.message.create(

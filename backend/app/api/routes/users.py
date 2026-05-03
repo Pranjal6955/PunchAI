@@ -11,27 +11,11 @@ from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListRespo
 from app.api.deps import get_current_user
 
 from app.core.security import get_password_hash
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.post("/", response_model=UserResponse, status_code=201)
-async def create_user(payload: UserCreate):
-    """Create a new user with hashed password."""
-    # Check for duplicate email
-    existing = await db.user.find_unique(where={"email": payload.email})
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    user = await db.user.create(
-        data={
-            "email": payload.email,
-            "password": get_password_hash(payload.password),
-            "name": payload.name,
-            "avatar": payload.avatar,
-        }
-    )
-    return user
 
 
 @router.get("/", response_model=UserListResponse)
@@ -89,8 +73,11 @@ async def upload_avatar(
     file_name = f"avatar_{current_user.id}{file_extension}"
     file_path = os.path.join(UPLOAD_DIR, file_name)
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    def save_file():
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    
+    await run_in_threadpool(save_file)
     
     # URL for the avatar (serving via the new API route)
     avatar_url = f"/api/users/avatar/{file_name}"
@@ -119,11 +106,14 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
 @router.get("/avatar/{filename}")
 async def get_avatar(filename: str):
     """Serve user avatars publicly."""
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(filename)
+    
     # Safety Check: only allows avatar_ prefixed files
-    if not filename.startswith("avatar_"):
+    if not safe_filename.startswith("avatar_"):
         raise HTTPException(status_code=403, detail="Not authorized to access this file type")
         
-    file_path = os.path.join("uploads", filename)
+    file_path = os.path.join("uploads", safe_filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Avatar not found")
         

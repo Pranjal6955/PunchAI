@@ -6,7 +6,8 @@ Handles file uploads, URL scraping, and granular FAQ management with specialized
 import os
 import shutil
 from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Query, BackgroundTasks
+import uuid
 from fastapi.responses import FileResponse
 from fastapi.concurrency import run_in_threadpool
 from prisma import Json
@@ -41,34 +42,9 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@router.post("/upload", response_model=DataSourceResponse)
-async def upload_file(
-    botId: str = Form(...),
-    file: UploadFile = File(...),
-    current_user=Depends(get_current_user),
-):
-    """Upload File (PDF, DOCX, XLSX, PPTX) -> Specialized Extraction -> RAG Preprocessing."""
-    bot = await db.bot.find_unique(where={"id": botId})
-    if not bot or bot.ownerId != current_user.id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
-    # Sanitize filename to prevent path traversal
-    filename = file.filename
-    safe_filename = os.path.basename(filename)
-    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{safe_filename}")
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    ds = await db.datasource.create(
-        data={
-            "name": filename, "type": "FILE", "status": "PROCESSING",
-            "fileUrl": file_path, "bot": {"connect": {"id": botId}},
-        }
-    )
-
-    # 1. Choose specialized extractor based on file extension
+async def process_file_background(bot_id: str, source_id: str, file_path: str, safe_filename: str):
+    """Background task to extract text and store in RAG."""
     ext = os.path.splitext(safe_filename)[1].lower()
-    
     try:
         if ext == ".pdf":
             content = await run_in_threadpool(extract_text_from_pdf, file_path)
@@ -83,78 +59,139 @@ async def upload_file(
             content = await run_in_threadpool(extract_text_from_pptx, file_path)
             doc_type = "PPT"
         else:
-            # Fallback to unstructured for other types or if specialized fails
             content = await run_in_threadpool(extract_text_universal, file_path)
             doc_type = "DOCUMENT"
 
         if content and content.strip():
             await process_and_store(
-                bot_id=botId, source_id=ds.id, raw_text=content, 
+                bot_id=bot_id, source_id=source_id, raw_text=content, 
                 metadata={"source_name": safe_filename, "type": doc_type}
             )
-            await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
+            await db.datasource.update(where={"id": source_id}, data={"status": "COMPLETED"})
         else:
             logger.error(f"Extraction failed for {safe_filename}: No content found")
-            await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
+            await db.datasource.update(where={"id": source_id}, data={"status": "FAILED"})
             
     except Exception as e:
-        logger.error(f"Error during file processing: {e}")
-        await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
+        logger.error(f"Error during background file processing: {e}")
+        await db.datasource.update(where={"id": source_id}, data={"status": "FAILED"})
+
+
+@router.post("/upload", response_model=DataSourceResponse)
+async def upload_file(
+    background_tasks: BackgroundTasks,
+    botId: str = Form(...),
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Upload File -> Return immediately -> Process in background."""
+    bot = await db.bot.find_unique(where={"id": botId})
+    if not bot or bot.ownerId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    # Sanitize and unique-ify filename
+    filename = file.filename
+    safe_filename = os.path.basename(filename)
+    unique_prefix = uuid.uuid4().hex[:8]
+    file_path = os.path.join(UPLOAD_DIR, f"{botId}_{unique_prefix}_{safe_filename}")
+
+    # Use run_in_threadpool to avoid blocking the event loop during file write
+    def save_upload():
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    
+    await run_in_threadpool(save_upload)
+
+    ds = await db.datasource.create(
+        data={
+            "name": filename, "type": "FILE", "status": "PROCESSING",
+            "fileUrl": file_path, "bot": {"connect": {"id": botId}},
+        }
+    )
+
+    # Offload processing to background
+    background_tasks.add_task(process_file_background, botId, ds.id, file_path, safe_filename)
 
     return ds
 
 
+async def process_url_background(bot_id: str, source_id: str, url: str):
+    """Background task to scrape URL and store in RAG."""
+    try:
+        content = await extract_text_from_url(url)
+        if content:
+            await process_and_store(
+                bot_id=bot_id, source_id=source_id, raw_text=content, 
+                metadata={"url": url, "type": "URL"}
+            )
+            await db.datasource.update(where={"id": source_id}, data={"status": "COMPLETED"})
+        else:
+            logger.warning(f"No content extracted for URL: {url}")
+            await db.datasource.update(where={"id": source_id}, data={"status": "FAILED"})
+    except Exception as e:
+        logger.error(f"Error processing URL {url} in background: {e}")
+        await db.datasource.update(where={"id": source_id}, data={"status": "FAILED"})
+
+
 @router.post("/url", response_model=DataSourceResponse)
-async def add_url(payload: URLSourceCreate, current_user=Depends(get_current_user)):
-    """Add URL -> Specialized Scraping (strips nav/ads) -> RAG Preprocessing."""
+async def add_url(
+    payload: URLSourceCreate, 
+    background_tasks: BackgroundTasks,
+    current_user=Depends(get_current_user)
+):
+    """Add URL -> Return immediately -> Scrape in background."""
     bot = await db.bot.find_unique(where={"id": payload.botId})
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    normalized_url = payload.url
     ds = await db.datasource.create(
         data={
-            "name": normalized_url, "type": "URL", "status": "PROCESSING",
+            "name": payload.url, "type": "URL", "status": "PROCESSING",
             "bot": {"connect": {"id": payload.botId}},
         }
     )
 
-    try:
-        # 1. Specialized URL Extraction & Cleaning (filters nav/footer/ads)
-        content = await extract_text_from_url(normalized_url)
-        if content:
-            # process_and_store now handles both splitting into granular chunks 
-            # and saving them to both ChromaDB and Postgres SQL.
-            await process_and_store(
-                bot_id=payload.botId, source_id=ds.id, raw_text=content, 
-                metadata={"url": normalized_url, "type": "URL"}
-            )
-            await db.datasource.update(where={"id": ds.id}, data={"status": "COMPLETED"})
-        else:
-            logger.warning(f"No content extracted for URL datasource: {normalized_url}")
-            await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
-    except Exception as e:
-        logger.error(f"Error processing URL datasource {normalized_url}: {e}")
-        await db.datasource.update(where={"id": ds.id}, data={"status": "FAILED"})
-
+    background_tasks.add_task(process_url_background, payload.botId, ds.id, payload.url)
     return ds
 
 
+async def process_faq_background(bot_id: str, source_id: str, faqs: List, source_name: str):
+    """Background task to format FAQs and store in RAG."""
+    try:
+        full_faq_text = ""
+        for item in faqs:
+            # Format FAQ for RAG context
+            faq_text = clean_faq_text(item.question, item.answer)
+            full_faq_text += faq_text + "\n\n"
+
+        await process_and_store(
+            bot_id=bot_id, source_id=source_id, raw_text=full_faq_text, 
+            metadata={"source_name": source_name, "type": "FAQ"}
+        )
+        await db.datasource.update(where={"id": source_id}, data={"status": "COMPLETED"})
+    except Exception as e:
+        logger.error(f"Error processing FAQ in background: {e}")
+        await db.datasource.update(where={"id": source_id}, data={"status": "FAILED"})
+
+
 @router.post("/faq", response_model=DataSourceResponse)
-async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_current_user)):
-    """Add FAQs -> Specialized Q&A Formatting -> RAG Preprocessing."""
+async def add_faq_batch(
+    payload: FAQSourceCreate, 
+    background_tasks: BackgroundTasks,
+    current_user=Depends(get_current_user)
+):
+    """Add FAQs -> Return immediately -> Process in background."""
     bot = await db.bot.find_unique(where={"id": payload.botId})
     if not bot or bot.ownerId != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     ds = await db.datasource.create(
-        data={"name": payload.name, "type": "TEXT", "status": "COMPLETED", "bot": {"connect": {"id": payload.botId}}}
+        data={"name": payload.name, "type": "TEXT", "status": "PROCESSING", "bot": {"connect": {"id": payload.botId}}}
     )
 
-    full_faq_text = ""
+    # 1. Create FAQ records for granular management (keeping this synchronous for immediate UI feedback)
     for item in payload.faqs:
-        # 1. Create FAQ record for granular management
-        faq_record = await db.faq.create(
+        await db.faq.create(
             data={
                 "question": item.question,
                 "answer": item.answer,
@@ -162,16 +199,8 @@ async def add_faq_batch(payload: FAQSourceCreate, current_user=Depends(get_curre
                 "bot": {"connect": {"id": payload.botId}}
             }
         )
-        
-        # 2. Format FAQ for RAG context
-        faq_text = clean_faq_text(item.question, item.answer)
-        full_faq_text += faq_text + "\n\n"
 
-    # process_and_store will chunk the concatenated FAQs and save them to SQL/Vector stores
-    await process_and_store(
-        bot_id=payload.botId, source_id=ds.id, raw_text=full_faq_text, 
-        metadata={"source_name": payload.name, "type": "FAQ"}
-    )
+    background_tasks.add_task(process_faq_background, payload.botId, ds.id, payload.faqs, payload.name)
 
     return ds
 

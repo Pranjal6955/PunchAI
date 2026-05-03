@@ -34,9 +34,12 @@ from app.api.routes.external import router as external_router
 # ── Lifespan: DB connect / disconnect ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.utils.extractor import pw_manager
     logger.info("Starting up PunchAI Backend...")
     await connect_db()
+    await pw_manager.start()
     yield
+    await pw_manager.stop()
     await disconnect_db()
     logger.info("Shutting down PunchAI Backend...")
 
@@ -55,37 +58,48 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── CORS Middleware ──
-# We allow specific origins with credentials for the dashboard, 
-# and we will handle external widget logic by ensuring the origins are permissive.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# ── Unified CORS Middleware ──
 @app.middleware("http")
-async def external_cors_middleware(request: Request, call_next):
+async def unified_cors_middleware(request: Request, call_next):
     """
-    Handle CORS for external widget routes.
-    Allows all origins for /api/external to support the embeddable widget.
+    Handles CORS for both the internal dashboard and external widget.
+    - Dashboard: Requires credentials, limited to settings.cors_origins_list.
+    - External: Allows all origins, no credentials.
     """
-    if request.url.path.startswith("/api/external"):
-        if request.method == "OPTIONS":
-            return Response(
-                status_code=204,
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                    "Access-Control-Allow-Headers": "*",
-                }
-            )
-        response = await call_next(request)
+    origin = request.headers.get("Origin")
+    is_external = request.url.path.startswith("/api/external")
+
+    # 1. Handle Preflight (OPTIONS)
+    if request.method == "OPTIONS":
+        headers = {
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+            "Access-Control-Max-Age": "86400",
+        }
+        
+        if is_external:
+            headers["Access-Control-Allow-Origin"] = "*"
+        elif origin in settings.cors_origins_list:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+        else:
+            # Fallback for security: allow first configured origin
+            headers["Access-Control-Allow-Origin"] = settings.cors_origins_list[0] if settings.cors_origins_list else "*"
+            headers["Access-Control-Allow-Credentials"] = "true"
+
+        return Response(status_code=204, headers=headers)
+
+    # 2. Handle Actual Request
+    response = await call_next(request)
+
+    # 3. Add CORS Headers to Response
+    if is_external:
         response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
-    return await call_next(request)
+    elif origin in settings.cors_origins_list:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    return response
 
 # ── Register Routers ──
 API_PREFIX = "/api"

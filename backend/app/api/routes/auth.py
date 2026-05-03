@@ -76,7 +76,12 @@ async def login(payload: UserLogin):
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(user: UserResponse = Depends(get_current_user)):
-    """Refresh the access token for the current user."""
+    """
+    Refresh the access token for the current user.
+    NOTE: Currently uses the access token itself to refresh.
+    In the future, implement full Refresh Token Rotation (RTR) with a separate 
+    long-lived refresh token stored in a secure cookie for enhanced security.
+    """
     token = create_access_token(subject=user.id)
     return {
         "accessToken": token,

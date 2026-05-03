@@ -18,18 +18,20 @@ async def test_rag_flow():
     question = "What is the main topic of the uploaded documents?"
     
     # 2. Retrieve
-    context = await hybrid_retrieve(bot_id=bot.id, query=question, top_k=3)
+    retrieval = await hybrid_retrieve(bot_id=bot.id, query=question, top_k=3)
+    assert isinstance(retrieval, dict)
+    context = retrieval["chunks"]
     assert isinstance(context, list)
     
     # 3. Generate
     prompt = build_rag_prompt(persona=bot.botPersona, context=context, question=question)
-    response = await generate_llm_response(prompt)
+    ai_text, usage = await generate_llm_response(prompt)
     
-    assert response is not None
-    assert len(response) > 10
+    assert ai_text is not None
+    assert len(ai_text) > 10
     print(f"\nQuestion: {question}")
     print(f"Retrieved {len(context)} chunks")
-    print(f"Response: {response[:100]}...")
+    print(f"Response: {ai_text[:100]}...")
 
 # RAGAS Automated Evaluation script (Manual trigger or CI)
 async def run_ragas_eval(bot_id: str):
@@ -56,9 +58,10 @@ async def run_ragas_eval(bot_id: str):
     print(f"Starting RAGAS evaluation for bot {bot_id}...")
     
     for query in test_queries:
-        context = await hybrid_retrieve(bot_id, query, top_k=3)
+        retrieval = await hybrid_retrieve(bot_id, query, top_k=3)
+        context = retrieval["chunks"]
         prompt = build_rag_prompt(persona=None, context=context, question=query)
-        answer = await generate_llm_response(prompt)
+        answer, _ = await generate_llm_response(prompt)
         
         results_data["question"].append(query)
         results_data["answer"].append(answer)

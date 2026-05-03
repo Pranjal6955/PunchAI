@@ -17,6 +17,40 @@ from app.core.logging import logger
 from urllib.parse import urlparse
 
 
+class PlaywrightManager:
+    """
+    Singleton-style manager for Playwright browser instance.
+    Managed via the application lifespan in main.py.
+    """
+    def __init__(self):
+        self._pw = None
+        self._browser = None
+
+    async def start(self):
+        if not self._pw:
+            self._pw = await async_playwright().start()
+            self._browser = await self._pw.chromium.launch(
+                headless=True,
+                args=["--disable-dev-shm-usage", "--no-sandbox"]
+            )
+            logger.info("Playwright Browser started")
+
+    async def stop(self):
+        if self._browser:
+            await self._browser.close()
+            self._browser = None
+        if self._pw:
+            await self._pw.stop()
+            self._pw = None
+        logger.info("Playwright Browser stopped")
+
+    def get_browser(self):
+        return self._browser
+
+
+pw_manager = PlaywrightManager()
+
+
 def clean_pdf_text(text: str) -> str:
     """Clean text extracted from PDF: removes headers/footers placeholders, fixes ligatures."""
     # Remove multiple newlines and normalize whitespace
@@ -157,43 +191,44 @@ def extract_text_universal(file_path: str) -> str:
 async def extract_text_from_url(url: str) -> str:
     """
     Scrape, extract, and specifically clean main content from a URL.
-    Refactored for stability, SPA recovery, and memory management.
+    Uses a shared Playwright browser instance for efficiency.
     """
-    browser = None
-    try:
-        async with async_playwright() as p:
-            # Launch with optimal flags for performance and bot evasion
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-dev-shm-usage", "--no-sandbox"]
-            )
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                viewport={'width': 1280, 'height': 900}
-            )
-            page = await context.new_page()
-            
-            logger.info(f"Scraping URL (Structural): {url}")
-            
-            # 1. Navigation with retry/timeout logic
-            try:
-                response = await page.goto(url, wait_until="networkidle", timeout=45000)
-            except Exception as e:
-                logger.warning(f"Initial navigation timed out for {url}, attempting capture anyway. Error: {e}")
-                response = None
+    browser = pw_manager.get_browser()
+    if not browser:
+        logger.warning(f"Playwright browser not initialized, falling back to static for {url}")
+        return await _extract_text_static(url)
 
-            # 2. SPA Recovery: Handle 404/Empty pages common in React/Vercel
-            if not response or response.status == 404:
-                parsed_url = urlparse(url)
-                base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
-                path = parsed_url.path.strip('/')
-                
-                if path:
-                    logger.info(f"Direct hit 404 or failed. Recovery via base: {base_url}")
+    context = None
+    page = None
+    try:
+        # Create a new context and page for each request to isolate sessions/cookies
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 900}
+        )
+        page = await context.new_page()
+        
+        logger.info(f"Scraping URL (Structural): {url}")
+        
+        # 1. Navigation with retry/timeout logic
+        try:
+            response = await page.goto(url, wait_until="networkidle", timeout=45000)
+        except Exception as e:
+            logger.warning(f"Initial navigation timed out for {url}, attempting capture anyway. Error: {e}")
+            response = None
+
+        # 2. SPA Recovery: Handle 404/Empty pages common in React/Vercel
+        if not response or response.status == 404:
+            parsed_url = urlparse(url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+            path = parsed_url.path.strip('/')
+            
+            if path:
+                logger.info(f"Direct hit 404 or failed. Recovery via base: {base_url}")
+                try:
                     await page.goto(base_url, wait_until="networkidle", timeout=30000)
                     
                     # Exact Link Search: finds the link to the subpage on the home page
-                    # Matches /flowers, flowers, or full URL
                     link = page.locator(f"a[href='/#/{path}'], a[href='/{path}'], a[href='{path}']").first
                     if await link.count() > 0:
                         logger.info(f"Found recovery link for {path}, clicking...")
@@ -201,60 +236,58 @@ async def extract_text_from_url(url: str) -> str:
                         await page.wait_for_load_state("networkidle")
                     else:
                         logger.warning(f"Recovery link not found for path: {path}")
+                except Exception as recovery_err:
+                    logger.warning(f"Recovery navigation failed: {recovery_err}")
 
-            # 3. Handle typical 'Newsletter/Cookie' popups that might block rendering
-            try:
-                # Press 'Escape' to close simple modals/popups
-                await page.keyboard.press("Escape")
-            except: pass
+        # 3. Handle typical 'Newsletter/Cookie' popups
+        try:
+            await page.keyboard.press("Escape")
+        except: pass
 
-            # 4. Smart Dynamic Scroll
-            # Adjusts speed based on page length to ensure lazy content loads
-            await page.evaluate("""
-                async () => {
-                    await new Promise((resolve) => {
-                        let totalHeight = 0;
-                        let distance = 250;
-                        let timer = setInterval(() => {
-                            let scrollHeight = document.body.scrollHeight;
-                            window.scrollBy(0, distance);
-                            totalHeight += distance;
-                            // Stop if we hit the bottom OR a reasonable max height for RAG (8000px)
-                            if(totalHeight >= scrollHeight || totalHeight > 8000){
-                                clearInterval(timer);
-                                resolve();
-                            }
-                        }, 100);
-                    });
-                }
-            """)
+        # 4. Smart Dynamic Scroll
+        await page.evaluate("""
+            async () => {
+                await new Promise((resolve) => {
+                    let totalHeight = 0;
+                    let distance = 250;
+                    let timer = setInterval(() => {
+                        let scrollHeight = document.body.scrollHeight;
+                        window.scrollBy(0, distance);
+                        totalHeight += distance;
+                        if(totalHeight >= scrollHeight || totalHeight > 8000){
+                            clearInterval(timer);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            }
+        """)
+        
+        # 5. Wait for Hydration
+        await asyncio.sleep(2)
+        
+        # 6. Capture
+        content = await page.content()
+        soup = BeautifulSoup(content, "html.parser")
+        text = clean_url_text(soup)
+        
+        # If Playwright fails to get substantial content, try the static fallback
+        if len(text.split()) < 10:
+            logger.warning(f"Playwright results sparse for {url}, trying static fallback")
+            return await _extract_text_static(url)
             
-            # 5. Wait for Hydration
-            await asyncio.sleep(2)
-            
-            # 6. Capture
-            content = await page.content()
-            soup = BeautifulSoup(content, "html.parser")
-            text = clean_url_text(soup)
-            
-            # If Playwright fails to get substantial content, try the static fallback
-            if len(text.split()) < 10:
-                logger.warning(f"Playwright results sparse for {url}, trying static fallback")
-                return await _extract_text_static(url)
-                
-            return text
+        return text
 
     except Exception as e:
         logger.error(f"Scraper structural failure for {url}: {e}")
         return await _extract_text_static(url)
     
     finally:
-        # CRITICAL: Prevent memory leaks by ensuring browser is closed
-        if browser:
-            try:
-                await browser.close()
-            except Exception as close_err:
-                logger.error(f"Error closing browser: {close_err}")
+        # Close page and context, but KEEP browser open
+        if page:
+            await page.close()
+        if context:
+            await context.close()
 
 
 async def _extract_text_static(url: str) -> str:

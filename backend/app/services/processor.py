@@ -47,11 +47,14 @@ def clean_text(text: str) -> str:
 
 async def extract_entities(text: str) -> List[str]:
     """GraphRAG Exploration Step: Extract key entities to build relationships."""
-    from app.services.llm import generate_groq_response
+    from app.services.llm import generate_groq_response, escape_xml_tags
     prompt = f"""Extract at most 5 primary entities (names, products, organizations, locations) from the text below.
 Return them as a comma-separated list. Return ONLY the names.
 
-Text: {text[:1000]}
+Text: 
+<input_text>
+{escape_xml_tags(text[:1000])}
+</input_text>
 Entities:"""
     try:
         res, _ = await generate_groq_response(prompt)
@@ -107,37 +110,43 @@ async def process_and_store(
         ]
         await db.documentchunk.create_many(data=chunk_data)
     except Exception as e:
-        logger.error(f"Failed to sync chunks to Postgres: {e}")
-        pass
+        logger.error(f"CRITICAL: Failed to sync chunks to Postgres for source {source_id}: {e}")
+        # Re-raise to ensure the background task marks the datasource as FAILED
+        raise e
 
     # 4. Vector Storage (Chroma)
-    collection = await run_in_threadpool(get_collection, bot_id)
-    
-    tot_chunks = len(chunks)
-    ids = [f"{source_id}_{i}" for i in range(tot_chunks)]
-    metadatas = []
-    for i in range(tot_chunks):
-        meta = metadata.copy() if metadata else {}
-        meta.update({
-            "source_id": source_id, 
-            "bot_id": bot_id, 
-            "chunk_index": i,
-            "entities": ",".join(entities) if entities else ""
-        })
-        metadatas.append(meta)
+    try:
+        collection = await run_in_threadpool(get_collection, bot_id)
+        
+        tot_chunks = len(chunks)
+        ids = [f"{source_id}_{i}" for i in range(tot_chunks)]
+        metadatas = []
+        for i in range(tot_chunks):
+            meta = metadata.copy() if metadata else {}
+            meta.update({
+                "source_id": source_id, 
+                "bot_id": bot_id, 
+                "chunk_index": i,
+                "entities": ",".join(entities) if entities else ""
+            })
+            metadatas.append(meta)
 
-    # 5. Explicit Embedding Generation (CPU-bound)
-    embeddings = await run_in_threadpool(model.encode, chunks)
-    embeddings_list = embeddings.tolist()
-    
-    # Store in ChromaDB
-    await run_in_threadpool(
-        collection.add,
-        ids=ids,
-        documents=chunks,
-        embeddings=embeddings_list,
-        metadatas=metadatas
-    )
+        # 5. Explicit Embedding Generation (CPU-bound)
+        embeddings = await run_in_threadpool(model.encode, chunks)
+        embeddings_list = embeddings.tolist()
+        
+        # Store in ChromaDB
+        await run_in_threadpool(
+            collection.add,
+            ids=ids,
+            documents=chunks,
+            embeddings=embeddings_list,
+            metadatas=metadatas
+        )
+    except Exception as e:
+        logger.error(f"CRITICAL: Failed to sync chunks to Chroma for source {source_id}: {e}")
+        # Re-raise to ensure the background task marks the datasource as FAILED
+        raise e
 
     return True
 
@@ -194,7 +203,7 @@ async def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str
         collection.query,
         query_embeddings=[query_embedding_list],
         n_results=top_k,
-        include=["documents", "distances"]
+        include=["documents", "distances", "metadatas"]
     )
     
     if not results or not results['documents']:
@@ -204,17 +213,18 @@ async def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str
     # 0.6 is a balanced threshold for all-MiniLM-L6-v2 cosine distance
     THRESHOLD = 0.6
     
-    filtered_docs = []
+    filtered_results = []
     docs = results['documents'][0]
     distances = results['distances'][0]
+    metadatas = results['metadatas'][0]
     
-    for doc, dist in zip(docs, distances):
+    for doc, dist, meta in zip(docs, distances, metadatas):
         if dist <= THRESHOLD:
-            filtered_docs.append(doc)
+            filtered_results.append({"content": doc, "metadata": meta})
         else:
             logger.debug(f"Chunk discarded due to low similarity (dist: {dist:.4f})")
             
-    return filtered_docs
+    return filtered_results
 
 
 async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str]:
@@ -227,14 +237,14 @@ async def retrieve_keywords(bot_id: str, query: str, top_k: int = 5) -> List[str
     async def _fetch():
         from app.core.database import db
         raw_query = """
-            SELECT content
+            SELECT content, metadata
             FROM document_chunks
             WHERE bot_id = $1
             AND to_tsvector('english', content) @@ websearch_to_tsquery('english', $2)
             LIMIT $3
         """
         results = await db.query_raw(raw_query, bot_id, query, top_k)
-        return [r['content'] for r in results]
+        return [{"content": r['content'], "metadata": r['metadata']} for r in results]
 
     try:
         # Increased timeout to 3.0s (was 1.5s) to handle larger datasets
@@ -267,14 +277,19 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
         tasks.append(retrieve_semantic(bot_id, q, top_k=candidate_k))
         tasks.append(retrieve_keywords(bot_id, q, top_k=candidate_k))
     
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    # Combine results from all tasks
-    for result_list in results:
-        for chunk in result_list:
-            if chunk not in seen:
-                all_candidates.append(chunk)
-                seen.add(chunk)
+    # Combine results from all tasks, ignoring exceptions
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"Hybrid retrieval task failed: {result}")
+            continue
+            
+        for item in result:
+            chunk_content = item["content"]
+            if chunk_content not in seen:
+                all_candidates.append(item)
+                seen.add(chunk_content)
     
     if not all_candidates:
         return {
@@ -285,7 +300,7 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
 
     # 3. Re-ranking: Score ALL candidates against the ORIGINAL query
     # This ensures accuracy even if expanded queries were a bit off
-    pairs = [[query, cand] for cand in all_candidates]
+    pairs = [[query, item["content"]] for item in all_candidates]
     
     # Run scoring in threadpool (CPU bound)
     scores = await run_in_threadpool(reranker.predict, pairs)
@@ -300,7 +315,7 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
     is_knowledge_gap = top_score < -2.0 
 
     return {
-        "chunks": [c for c, s in scored_candidates[:top_k]],
+        "chunks": [item for item, s in scored_candidates[:top_k]],
         "top_score": top_score,
         "is_knowledge_gap": is_knowledge_gap
     }

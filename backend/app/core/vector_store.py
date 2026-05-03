@@ -5,6 +5,7 @@ ChromaDB vector store configuration for PunchAI RAG system.
 import os
 import chromadb
 from chromadb.config import Settings
+from app.core.logging import logger
 
 CHROMA_DATA_PATH = "chroma_db"
 os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
@@ -29,8 +30,8 @@ def delete_collection(bot_id: str):
     """Delete the collection related to a specific bot."""
     try:
         client.delete_collection(name=f"bot_{bot_id}")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to delete Chroma collection for bot {bot_id}: {e}")
         
         
 def reset_vector_db():
