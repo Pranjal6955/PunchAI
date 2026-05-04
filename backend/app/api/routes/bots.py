@@ -17,7 +17,7 @@ import uuid
 router = APIRouter(prefix="/bots", tags=["Bots"])
 
 
-@router.post("/", response_model=BotResponse, status_code=201)
+@router.post("", response_model=BotResponse, status_code=201)
 async def create_bot(payload: BotCreate, current_user=Depends(get_current_user)):
     """Create a new bot/agent."""
     bot = await db.bot.create(
@@ -31,7 +31,7 @@ async def create_bot(payload: BotCreate, current_user=Depends(get_current_user))
     return bot
 
 
-@router.get("/", response_model=BotListResponse)
+@router.get("", response_model=BotListResponse)
 async def list_bots(
     skip: int = Query(0, ge=0),
     take: int = Query(20, ge=1, le=100),

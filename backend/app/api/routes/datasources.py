@@ -231,7 +231,7 @@ async def delete_faq(faq_id: str, current_user=Depends(get_current_user)):
     return None
 
 
-@router.get("/", response_model=DataSourceListResponse)
+@router.get("", response_model=DataSourceListResponse)
 async def list_bot_sources(botId: str = Query(...), current_user=Depends(get_current_user)):
     sources = await db.datasource.find_many(where={"botId": botId}, order={"createdAt": "desc"})
     return {"data": sources, "total": len(sources)}

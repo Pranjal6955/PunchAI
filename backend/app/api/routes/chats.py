@@ -22,7 +22,7 @@ from app.core.config import settings
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
 
-@router.post("/", response_model=ChatWithMessagesResponse, status_code=201)
+@router.post("", response_model=ChatWithMessagesResponse, status_code=201)
 async def create_chat(payload: ChatCreate, current_user=Depends(get_current_user)):
     """Start a new chat conversation."""
     if payload.userId != current_user.id:
@@ -262,7 +262,7 @@ async def get_chat(chat_id: str, current_user=Depends(get_current_user)):
     return chat
 
 
-@router.get("/", response_model=ChatListResponse)
+@router.get("", response_model=ChatListResponse)
 async def list_chats(userId: str = Query(...), current_user=Depends(get_current_user)):
     if userId != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
