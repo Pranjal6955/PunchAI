@@ -240,7 +240,7 @@ export interface BotListResponse {
 }
 
 export const getBots = async (ownerId?: string): Promise<Bot[]> => {
-  const url = ownerId ? `/api/bots/?ownerId=${ownerId}` : "/api/bots/";
+  const url = ownerId ? `/api/bots?ownerId=${ownerId}` : "/api/bots";
   const res = await authorizedFetch(url);
   if (!res.ok) return [];
   const data = await parseJsonSafely<BotListResponse>(res);
@@ -258,7 +258,7 @@ export const createBot = async (data: {
   description?: string;
   botPersona: string;
 }): Promise<Bot | null> => {
-  const res = await authorizedFetch("/api/bots/", {
+  const res = await authorizedFetch("/api/bots", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -356,7 +356,7 @@ export interface ChatListResponse {
 }
 
 export const getChats = async (userId: string): Promise<Chat[]> => {
-  const res = await authorizedFetch(`/api/chats/?userId=${userId}`);
+  const res = await authorizedFetch(`/api/chats?userId=${userId}`);
   if (!res.ok) return [];
   const data = await parseJsonSafely<ChatListResponse>(res);
   return data?.data || [];
@@ -395,7 +395,7 @@ export const createChat = async (data: {
   botId: string;
   title?: string;
 }): Promise<Chat | null> => {
-  const res = await authorizedFetch("/api/chats/", {
+  const res = await authorizedFetch("/api/chats", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -500,7 +500,7 @@ export interface DocumentChunk {
 }
 
 export const getDataSources = async (botId: string): Promise<DataSource[]> => {
-  const res = await authorizedFetch(`/api/datasources/?botId=${botId}`);
+  const res = await authorizedFetch(`/api/datasources?botId=${botId}`);
   if (!res.ok) return [];
   const data = await parseJsonSafely<DataSourceListResponse>(res);
   return data?.data || [];
