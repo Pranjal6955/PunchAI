@@ -70,6 +70,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+playwright install chromium
 
 # Push schema to Neon & Generate Client
 npx prisma db push
