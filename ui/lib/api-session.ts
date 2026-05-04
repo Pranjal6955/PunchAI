@@ -1,5 +1,5 @@
 export const apiBase =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/^["']|["']$/g, "").replace(/\/$/, "") ?? "";
 
 export const getAvatarUrl = (path?: string) => {
   if (!path) return undefined;
