@@ -167,12 +167,14 @@ async def add_external_message(
             "role": "ASSISTANT",
             "content": ai_text,
             "chat": {"connect": {"id": chat_id}},
-            "promptTokens": usage["prompt_tokens"],
-            "completionTokens": usage["completion_tokens"],
-            "totalTokens": usage["total_tokens"],
-            "topScore": retrieval["top_score"],
-            "isKnowledgeGap": retrieval["is_knowledge_gap"],
-            "metadata": Json({"source_chunks": len(context_chunks)})
+            "metadata": Json({
+                "source_chunks": len(context_chunks),
+                "prompt_tokens": usage["prompt_tokens"],
+                "completion_tokens": usage["completion_tokens"],
+                "total_tokens": usage["total_tokens"],
+                "top_score": retrieval["top_score"],
+                "is_knowledge_gap": retrieval["is_knowledge_gap"],
+            }),
         }
     )
 
@@ -265,10 +267,10 @@ async def add_external_message_stream(
                             "role": "ASSISTANT",
                             "content": full_text,
                             "chat": {"connect": {"id": chat_id}},
-                            "topScore": retrieval["top_score"],
-                            "isKnowledgeGap": retrieval["is_knowledge_gap"],
                             "metadata": Json({
-                                "source_chunks": len(context_chunks), 
+                                "source_chunks": len(context_chunks),
+                                "top_score": retrieval["top_score"],
+                                "is_knowledge_gap": retrieval["is_knowledge_gap"],
                                 "streamed": True,
                                 "interrupted": is_interrupted
                             })
