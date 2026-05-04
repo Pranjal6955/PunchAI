@@ -7,7 +7,7 @@ export const getAvatarUrl = (path?: string) => {
   return `${apiBase}${path}`;
 };
 
-const buildApiUrl = (path: string) => (apiBase ? `${apiBase}${path}` : path);
+export const buildApiUrl = (path: string) => (apiBase ? `${apiBase}${path}` : path);
 
 export const getStoredAccessToken = () => {
   if (typeof window === "undefined") return null;
@@ -404,6 +404,38 @@ export const createChat = async (data: {
   });
   if (!res.ok) return null;
   return await parseJsonSafely<Chat>(res);
+};
+
+export const addMessageStream = async (
+  chatId: string,
+  content: string,
+  onChunk: (chunk: string) => void
+): Promise<void> => {
+  const token = getStoredAccessToken();
+  const res = await fetch(buildApiUrl(`/api/chats/${chatId}/messages/stream`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ content }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Streaming failed");
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("Response body is not readable");
+
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    onChunk(chunk);
+  }
 };
 
 export const addMessage = async (chatId: string, content: string, model?: string): Promise<Message | null> => {

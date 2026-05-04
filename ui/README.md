@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment Variables
+
+Create a `.env.local` file in the `ui` directory:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+For production, set `NEXT_PUBLIC_API_URL` to your live backend URL (e.g., `https://api.punchai.com`).
+
 ## Getting Started
 
 First, run the development server:

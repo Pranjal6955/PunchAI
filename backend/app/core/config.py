@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # ── CORS ──
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
+    # ── Chroma ──
+    CHROMA_DATA_PATH: str = "chroma_db"
+
     # ── OpenRouter ──
     OPENROUTER_API_KEY: str = "sk-or-v1-..."
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct"

@@ -82,6 +82,26 @@ uvicorn app.main:app --reload
 
 ---
 
+## 🌐 Production Readiness
+
+### 1. Environment Configuration
+Ensure `.env` has:
+- `APP_ENV="production"`
+- `CORS_ORIGINS="https://your-frontend.com"` (Include your live frontend URL)
+- `DATABASE_URL` (Neon PostgreSQL)
+
+### 2. Deployment (Docker)
+Build and run the production container:
+```bash
+docker build -t punchai-backend .
+docker run -p 8000:8000 --env-file .env punchai-backend
+```
+
+### 3. Live Links
+The integration tab in the UI will automatically generate script tags using the `NEXT_PUBLIC_API_URL` configured in the frontend. Ensure the backend is reachable at that address.
+
+---
+
 ## 📌 Core API Endpoints
 
 | Category | Method | Endpoint | Description |

@@ -1,9 +1,10 @@
 """
 REST API routes for Chat and Message operations with full RAG (Retrieval-Augmented Generation).
-Integrates local ChromaDB and local Ollama (Llama 3).
+Integrates local ChromaDB and cloud LLMs (OpenRouter/Groq).
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, Depends, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from app.core.database import db
 from app.schemas.chat import (
     ChatCreate,
@@ -15,7 +16,7 @@ from app.schemas.chat import (
 from prisma import Json
 from app.api.deps import get_current_user
 from app.services.processor import hybrid_retrieve
-from app.services.llm import build_rag_prompt, generate_llm_response
+from app.services.llm import build_rag_prompt, generate_llm_response, generate_llm_stream
 from app.core.config import settings
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -147,6 +148,95 @@ async def add_message(
 
     # Return the assistant's message as the reply
     return assistant_msg
+
+
+@router.post("/{chat_id}/messages/stream")
+async def add_message_stream(
+    chat_id: str,
+    payload: MessageCreate,
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """
+    Streamed RAG Response for the Dashboard Playground.
+    """
+    chat = await db.chat.find_unique(where={"id": chat_id}, include={"bot": True})
+    if not chat or chat.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Message content cannot be empty")
+
+    # 1. Save User Message
+    user_msg = await db.message.create(
+        data={
+            "role": "USER",
+            "content": content,
+            "chat": {"connect": {"id": chat_id}},
+        }
+    )
+
+    # 2. Hybrid RAG Retrieval
+    from app.services.llm import get_search_query
+    refinement_history = await db.message.find_many(
+        where={"chatId": chat_id, "NOT": {"id": user_msg.id}},
+        order={"createdAt": "desc"},
+        take=3
+    )
+    search_query = await get_search_query(content, refinement_history)
+    
+    retrieval = await hybrid_retrieve(bot_id=chat.botId, query=search_query, top_k=5)
+    context_chunks = retrieval["chunks"]
+    
+    await db.message.update(
+        where={"id": user_msg.id}, 
+        data={"metadata": Json({"chunks": context_chunks, "refined_query": search_query})}
+    )
+
+    # 3. History
+    history = await db.message.find_many(
+        where={"chatId": chat_id, "NOT": {"id": user_msg.id}},
+        order={"createdAt": "desc"},
+        take=10
+    )
+    history.reverse()
+
+    prompt = build_rag_prompt(
+        persona=chat.bot.botPersona,
+        context=context_chunks,
+        question=content,
+        history=history
+    )
+
+    # 4. Stream Response
+    async def chat_generator():
+        full_text = ""
+        try:
+            async for chunk in generate_llm_stream(prompt):
+                full_text += chunk
+                yield chunk
+        except Exception as e:
+            logger.error(f"Error during streaming: {e}")
+        finally:
+            if full_text.strip():
+                try:
+                    await db.message.create(
+                        data={
+                            "role": "ASSISTANT",
+                            "content": full_text,
+                            "chat": {"connect": {"id": chat_id}},
+                            "metadata": Json({
+                                "source_chunks": len(context_chunks),
+                                "chunks": context_chunks,
+                                "streamed": True
+                            })
+                        }
+                    )
+                except Exception as db_err:
+                    logger.error(f"Failed to save streamed message: {db_err}")
+
+    return StreamingResponse(chat_generator(), media_type="text/plain")
 
 
 @router.get("/{chat_id}", response_model=ChatWithMessagesResponse)

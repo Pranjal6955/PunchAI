@@ -130,7 +130,7 @@ def extract_text_from_pdf(file_path: str) -> str:
                 raw_text += content + "\n"
         return clean_pdf_text(raw_text)
     except Exception as e:
-        print(f"Error extracting PDF: {e}")
+        logger.error(f"Error extracting PDF: {e}")
         return ""
 
 
@@ -140,7 +140,7 @@ def extract_text_from_docx(file_path: str) -> str:
         doc = docx.Document(file_path)
         return "\n".join([para.text for para in doc.paragraphs])
     except Exception as e:
-        print(f"Error extracting DOCX: {e}")
+        logger.error(f"Error extracting DOCX: {e}")
         return ""
 
 
@@ -157,7 +157,7 @@ def extract_text_from_xlsx(file_path: str) -> str:
             text += df.to_csv(index=False, sep='\t') + "\n\n"
         return text
     except Exception as e:
-        print(f"Error extracting XLSX: {e}")
+        logger.error(f"Error extracting XLSX: {e}")
         return ""
 
 
@@ -174,7 +174,7 @@ def extract_text_from_pptx(file_path: str) -> str:
             text += "\n"
         return text
     except Exception as e:
-        print(f"Error extracting PPTX: {e}")
+        logger.error(f"Error extracting PPTX: {e}")
         return ""
 
 
@@ -184,7 +184,7 @@ def extract_text_universal(file_path: str) -> str:
         elements = partition(filename=file_path)
         return "\n\n".join([str(el) for el in elements])
     except Exception as e:
-        print(f"Error using unstructured extractor: {e}")
+        logger.error(f"Error using unstructured extractor: {e}")
         return ""
 
 

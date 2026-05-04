@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bot } from "@/lib/api-session";
+import { Bot, apiBase } from "@/lib/api-session";
 import {
   Card,
   CardContent,
@@ -85,7 +85,7 @@ export function IntegrationTab({
                   {`<script 
   src="${origin}/widget/punch-chat.js"
   data-api-key="${bot.apiKey && showApiKey ? bot.apiKey : bot.apiKey ? "••••••••••••••••" : "YOUR_API_KEY"}"
-  data-base-url="http://localhost:8000"
+  data-base-url="${apiBase}"
 ></script>`}
                 </pre>
                 <Button
@@ -93,7 +93,7 @@ export function IntegrationTab({
                   variant="secondary"
                   className="absolute top-2 right-2 rounded-none opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={() => {
-                    const code = `<script \n  src="${origin}/widget/punch-chat.js"\n  data-api-key="${bot.apiKey || "YOUR_API_KEY"}"\n  data-base-url="http://localhost:8000"\n></script>`;
+                    const code = `<script \n  src="${origin}/widget/punch-chat.js"\n  data-api-key="${bot.apiKey || "YOUR_API_KEY"}"\n  data-base-url="${apiBase}"\n></script>`;
                     navigator.clipboard.writeText(code);
                     toast.success("Script tag copied to clipboard");
                   }}
@@ -207,7 +207,7 @@ export function IntegrationTab({
                 Quick Test (cURL)
               </Label>
               <pre className="bg-muted border-border/50 overflow-x-auto border p-4 font-mono text-xs leading-relaxed">
-                {`curl -X POST http://localhost:8000/api/external/chat/init \\
+                {`curl -X POST ${apiBase}/api/external/chat/init \\
   -H "X-API-Key: ${bot.apiKey && showApiKey ? bot.apiKey : bot.apiKey ? "••••••••••••••••" : "YOUR_API_KEY"}"`}
               </pre>
             </div>

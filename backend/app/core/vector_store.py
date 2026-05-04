@@ -5,9 +5,10 @@ ChromaDB vector store configuration for PunchAI RAG system.
 import os
 import chromadb
 from chromadb.config import Settings
+from app.core.config import settings
 from app.core.logging import logger
 
-CHROMA_DATA_PATH = "chroma_db"
+CHROMA_DATA_PATH = settings.CHROMA_DATA_PATH
 os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
 
 # Initialize persistent Chroma client

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   addMessage,
+  addMessageStream,
   createChat,
   getChat,
   getSuggestedQuestions,
@@ -279,14 +280,62 @@ export default function PlaygroundPage() {
   });
 
   // Handlers
-  const sendMessageHandler = (content: string) => {
+  const sendMessageHandler = async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed || !chatId || messageMutation.isPending) return;
     if (trimmed.length > MAX_CHARS) {
       toast.error(`Message too long (max ${MAX_CHARS} characters)`);
       return;
     }
-    messageMutation.mutate(trimmed);
+
+    // 1. Add user message locally
+    const userMsgId = `user-${Date.now()}`;
+    const userMsg: ExtendedMessage = {
+      id: userMsgId,
+      role: "USER",
+      content: trimmed,
+      chatId: chatId,
+      createdAt: new Date().toISOString(),
+    };
+    
+    // 2. Add empty assistant message for streaming
+    const assistantMsgId = `assistant-${Date.now()}`;
+    const assistantMsg: ExtendedMessage = {
+      id: assistantMsgId,
+      role: "ASSISTANT",
+      content: "",
+      chatId: chatId,
+      createdAt: new Date(Date.now() + 1).toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setInput("");
+
+    try {
+      let accumulated = "";
+      await addMessageStream(chatId, trimmed, (chunk) => {
+        accumulated += chunk;
+        setMessages((prev) => 
+          prev.map(m => m.id === assistantMsgId ? { ...m, content: accumulated } : m)
+        );
+      });
+      
+      // Refresh chat to get metadata and real IDs from server
+      const updatedChat = await getChat(chatId);
+      if (updatedChat) {
+        const sorted = [...(updatedChat.messages ?? [])].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        setMessages(sorted as ExtendedMessage[]);
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === userMsgId ? { ...m, failed: true, pendingContent: trimmed } : m
+        ).filter(m => m.id !== assistantMsgId)
+      );
+      toast.error("Failed to send message");
+    }
   };
 
   const handleSend = (e: React.FormEvent) => {
