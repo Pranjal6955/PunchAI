@@ -1,15 +1,8 @@
-"""
-Security utilities for password hashing and JWT authentication.
-"""
-
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Any, Union
 from jose import jwt
-from passlib.context import CryptContext
 from app.core.config import settings
-
-# ── Password Hashing ──
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ── JWT Config ──
 ALGORITHM = "HS256"
@@ -32,10 +25,17 @@ def create_access_token(
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a plain password against its hash using bcrypt."""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
+    except Exception:
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Generate a password hash from a plain password string."""
-    return pwd_context.hash(password)
+    """Generate a bcrypt password hash from a plain password string."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
