@@ -4,7 +4,7 @@
     // 1. Get Configuration & Inject Base Styles
     const script = document.currentScript;
     const scriptUrl = new URL(script.src);
-    const baseUrl = script.getAttribute('data-base-url') || 'http://localhost:8000';
+    const baseUrl = script.getAttribute('data-base-url') || scriptUrl.origin;
     const apiKey = script.getAttribute('data-api-key');
 
     // Create and inject the stylesheet link
@@ -111,13 +111,21 @@
         inputEl.value = '';
         addMessage('user', text);
 
-        if (!chatId) await initChat();
-
         const typing = document.createElement('div');
         typing.className = 'punch-typing';
         typing.innerText = `${botInfo?.name || 'Assistant'} is typing...`;
         messagesEl.appendChild(typing);
         messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        if (!chatId) {
+            await initChat();
+        }
+
+        if (!chatId) {
+            typing.remove();
+            addMessage('assistant', 'Sorry, I could not initialize a chat session. Please check your API key.');
+            return;
+        }
 
         try {
             const res = await fetch(`${baseUrl}/api/external/chat/${chatId}/message`, {
@@ -135,11 +143,12 @@
                 const data = await res.json();
                 addMessage('assistant', data.content);
             } else {
-                addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+                const errData = await res.json().catch(() => ({}));
+                addMessage('assistant', `Error: ${errData.detail || 'Could not get a response.'}`);
             }
         } catch (e) {
             typing.remove();
-            addMessage('assistant', 'Sorry, I could not connect to the server.');
+            addMessage('assistant', 'Connection Error: Could not reach the PunchAI server.');
         }
     }
 
