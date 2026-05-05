@@ -210,8 +210,8 @@ async def retrieve_semantic(bot_id: str, query: str, top_k: int = 5) -> List[str
         return []
 
     # Similarity Guard: Filter out chunks with high distance (low confidence)
-    # 0.6 is a balanced threshold for all-MiniLM-L6-v2 cosine distance
-    THRESHOLD = 0.6
+    # 0.75 is a more permissive threshold for all-MiniLM-L6-v2 cosine distance to improve recall.
+    THRESHOLD = 0.75
     
     filtered_results = []
     docs = results['documents'][0]
@@ -312,7 +312,7 @@ async def hybrid_retrieve(bot_id: str, query: str, top_k: int = 5, expand: bool 
     
     # Knowledge Gap threshold: if top score is very low (e.g. < -5 for ms-marco), mark as gap
     # ms-marco-MiniLM-L-6-v2 scores are logits, usually -10 to 10.
-    is_knowledge_gap = top_score < -2.0 
+    is_knowledge_gap = top_score < -3.0 
 
     return {
         "chunks": [item for item, s in scored_candidates[:top_k]],
