@@ -67,47 +67,86 @@ def clean_pdf_text(text: str) -> str:
 
 
 def clean_url_text(soup: BeautifulSoup) -> str:
-    """Clean text extracted from a URL: removes nav, footer, ads, and boilerplate."""
-    # 1. Removal of non-content elements
-    # We remove nav/footer/header but keep sections and the main body
-    for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe", "input"]):
+    """
+    Advanced Content Extraction Strategy:
+    1. Extracts Title & Metadata for context.
+    2. Parses JSON-LD for structured data.
+    3. Identifies and extracts 'Main' content while stripping boilerplate.
+    4. Normalizes whitespace and structure.
+    """
+    # 1. Metadata & Title Extraction (Contextual enrichment)
+    title = soup.title.string if soup.title else ""
+    meta_desc = ""
+    desc_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", attrs={"property": "og:description"})
+    if desc_tag:
+        meta_desc = desc_tag.get("content", "")
+
+    # 2. JSON-LD Extraction (Structured Data)
+    structured_data = []
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            # We don't necessarily need to parse it as JSON, just clean it up
+            content = script.string.strip()
+            if content:
+                structured_data.append(content)
+        except: continue
+
+    # 3. Boilerplate & Noise Removal
+    for element in soup(["script", "style", "nav", "footer", "header", "aside", "form", "iframe", "input", "noscript"]):
         element.decompose()
         
-    # 2. Extract text from primary containers
-    # Added '.page' and 'section' as common React/Next.js patterns
+    # Remove common ad and social noise classes/ids
+    noise_patterns = ["ad-", "social-", "share-", "sidebar", "menu", "banner", "cookie"]
+    for tag in soup.find_all(class_=re.compile("|".join(noise_patterns), re.I)):
+        tag.decompose()
+    for tag in soup.find_all(id=re.compile("|".join(noise_patterns), re.I)):
+        tag.decompose()
+
+    # 4. Hierarchical Content Extraction
+    # Strategy A: Semantic Containers
     main_content = soup.select_one(
-        "main, article, [role='main'], #content, .content, .page, #main, .main"
+        "main, article, [role='main'], #content, .content, .page, .post-content, .article-body"
     )
     
-    text = ""
+    text_parts = []
+    if title: text_parts.append(f"PAGE TITLE: {title}")
+    if meta_desc: text_parts.append(f"DESCRIPTION: {meta_desc}")
+    
     if main_content:
-        # If we found a primary container, get its text
-        text = main_content.get_text(separator="\n", strip=True)
-    
-    # 3. Validation & Fallback: If primary content is missing or too short, 
-    # look for sections which are common in landing pages.
-    if len(text.split()) < 30:
-        sections = soup.select("section, div[class*='section'], div[class*='container']")
-        if sections:
-            section_texts = []
-            for s in sections:
-                s_text = s.get_text(separator=" ", strip=True)
-                if len(s_text.split()) > 3: # Ignore tiny fragments
-                    section_texts.append(s_text)
-            if section_texts:
-                text = "\n\n".join(section_texts)
+        # Get text with preserved structure
+        text_parts.append(main_content.get_text(separator="\n", strip=True))
+    else:
+        # Strategy B: High-density text blocks (fallback)
+        # Look for divs with high paragraph count
+        potential_containers = soup.find_all(["div", "section"])
+        best_container = None
+        max_p_count = 0
+        for container in potential_containers:
+            p_count = len(container.find_all("p"))
+            if p_count > max_p_count:
+                max_p_count = p_count
+                best_container = container
         
-    # 4. Final Fallback: just get everything that's left in the body
-    if len(text.split()) < 15:
-        body = soup.find('body')
-        text = body.get_text(separator="\n", strip=True) if body else soup.get_text(separator="\n", strip=True)
-        
-    # 5. Clean up whitespace and empty lines
-    lines = (line.strip() for line in text.splitlines())
-    # Filter out very short lines that are likely just UI fragments or noise
-    text = "\n".join(line for line in lines if len(line) > 5)
+        if best_container and max_p_count > 2:
+            text_parts.append(best_container.get_text(separator="\n", strip=True))
+        else:
+            # Final Strategy: Cleaned Body
+            body = soup.find('body')
+            if body:
+                text_parts.append(body.get_text(separator="\n", strip=True))
+
+    # 5. Combine and Refine
+    raw_text = "\n\n".join(text_parts)
     
-    return text.strip()
+    # Normalize empty lines and whitespace
+    lines = []
+    for line in raw_text.splitlines():
+        line = line.strip()
+        # Ignore tiny fragments, but keep headings and key metadata
+        if len(line) > 15 or "TITLE:" in line or "DESCRIPTION:" in line:
+            lines.append(line)
+            
+    return "\n".join(lines).strip()
 
 
 def clean_faq_text(question: str, answer: str) -> str:

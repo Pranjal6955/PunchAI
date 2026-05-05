@@ -25,6 +25,12 @@ class BotUpdate(BaseModel):
     welcomeMessage: Optional[str] = None
     suggestionChips: Optional[str] = None
     themeColor: Optional[str] = None
+    widgetWidth: Optional[str] = None
+    widgetBorderRadius: Optional[int] = None
+    userBorderRadius: Optional[int] = None
+    assistantBorderRadius: Optional[int] = None
+    userChatBg: Optional[str] = None
+    assistantChatBg: Optional[str] = None
 
 
 # ── Response Schemas ──
@@ -39,6 +45,12 @@ class BotResponse(BaseModel):
     welcomeMessage: Optional[str] = None
     suggestionChips: Optional[str] = None
     themeColor: Optional[str] = None
+    widgetWidth: Optional[str] = None
+    widgetBorderRadius: Optional[int] = None
+    userBorderRadius: Optional[int] = None
+    assistantBorderRadius: Optional[int] = None
+    userChatBg: Optional[str] = None
+    assistantChatBg: Optional[str] = None
     ownerId: str
     dataSourceCount: Optional[int] = 0
     createdAt: datetime

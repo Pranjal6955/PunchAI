@@ -228,6 +228,12 @@ export interface Bot {
   welcomeMessage?: string;
   suggestionChips?: string;
   themeColor?: string;
+  widgetWidth?: string;
+  widgetBorderRadius?: number;
+  userBorderRadius?: number;
+  assistantBorderRadius?: number;
+  userChatBg?: string;
+  assistantChatBg?: string;
   ownerId: string;
   createdAt: string;
   updatedAt: string;

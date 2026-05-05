@@ -39,6 +39,12 @@ model Bot {
     welcomeMessage  String? @map("welcome_message")
     suggestionChips String? @map("suggestion_chips") // JSON string of common questions
     themeColor      String? @map("theme_color")
+    widgetWidth     String? @map("widget_width")
+    widgetBorderRadius Int?    @map("widget_border_radius")
+    userBorderRadius Int?    @map("user_border_radius")
+    assistantBorderRadius Int? @map("assistant_border_radius")
+    userChatBg      String? @map("user_chat_bg")
+    assistantChatBg String? @map("assistant_chat_bg")
     createdAt   DateTime @default(now()) @map("created_at")
     updatedAt   DateTime @updatedAt @map("updated_at")
 
