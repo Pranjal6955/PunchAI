@@ -14,7 +14,7 @@ from pptx import Presentation
 from unstructured.partition.auto import partition
 from playwright.async_api import async_playwright
 from app.core.logging import logger
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 
 class PlaywrightManager:
@@ -103,32 +103,34 @@ def clean_url_text(soup: BeautifulSoup) -> str:
         tag.decompose()
 
     # 4. Hierarchical Content Extraction
-    # Strategy A: Semantic Containers
-    main_content = soup.select_one(
-        "main, article, [role='main'], #content, .content, .page, .post-content, .article-body"
-    )
+    # Strategy A: Semantic Containers (Extract ALL matches, not just one)
+    selectors = "main, article, [role='main'], #content, .content, .page, .post-content, .article-body"
+    containers = soup.select(selectors)
     
     text_parts = []
     if title: text_parts.append(f"PAGE TITLE: {title}")
     if meta_desc: text_parts.append(f"DESCRIPTION: {meta_desc}")
     
-    if main_content:
-        # Get text with preserved structure
-        text_parts.append(main_content.get_text(separator="\n", strip=True))
+    if containers:
+        for container in containers:
+            # Avoid nesting (if main contains article, don't double extract)
+            # This is a bit complex, but usually get_text() on the largest container is best.
+            # We'll take the top-level ones.
+            if not any(parent in containers for parent in container.parents):
+                text_parts.append(container.get_text(separator="\n", strip=True))
     else:
         # Strategy B: High-density text blocks (fallback)
-        # Look for divs with high paragraph count
         potential_containers = soup.find_all(["div", "section"])
-        best_container = None
-        max_p_count = 0
+        best_containers = []
         for container in potential_containers:
             p_count = len(container.find_all("p"))
-            if p_count > max_p_count:
-                max_p_count = p_count
-                best_container = container
+            if p_count > 2:
+                best_containers.append(container)
         
-        if best_container and max_p_count > 2:
-            text_parts.append(best_container.get_text(separator="\n", strip=True))
+        if best_containers:
+            for container in best_containers:
+                if not any(parent in best_containers for parent in container.parents):
+                    text_parts.append(container.get_text(separator="\n", strip=True))
         else:
             # Final Strategy: Cleaned Body
             body = soup.find('body')
@@ -140,13 +142,37 @@ def clean_url_text(soup: BeautifulSoup) -> str:
     
     # Normalize empty lines and whitespace
     lines = []
+    seen_lines = set()
     for line in raw_text.splitlines():
         line = line.strip()
-        # Ignore tiny fragments, but keep headings and key metadata
-        if len(line) > 15 or "TITLE:" in line or "DESCRIPTION:" in line:
+        # Deduplicate and filter
+        if (len(line) >= 3 or "TITLE:" in line) and line not in seen_lines:
             lines.append(line)
+            seen_lines.add(line)
             
     return "\n".join(lines).strip()
+
+
+def get_internal_links(soup: BeautifulSoup, base_url: str) -> list:
+    """Extract internal links from a BeautifulSoup object."""
+    links = set()
+    parsed_base = urlparse(base_url)
+    domain = parsed_base.netloc
+    
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        # Resolve relative URLs
+        full_url = urljoin(base_url, href)
+        parsed_url = urlparse(full_url)
+        
+        # Stay on the same domain and handle same-protocol or http/https
+        if parsed_url.netloc == domain and parsed_url.scheme in ['http', 'https', '']:
+            # Strip fragments and query params to avoid duplicates
+            clean_url = full_url.split('#')[0].split('?')[0].rstrip('/')
+            if clean_url and clean_url != base_url.rstrip('/'):
+                links.add(clean_url)
+                
+    return list(links)
 
 
 def clean_faq_text(question: str, answer: str) -> str:
@@ -227,9 +253,9 @@ def extract_text_universal(file_path: str) -> str:
         return ""
 
 
-async def extract_text_from_url(url: str) -> str:
+async def extract_text_from_url(url: str, max_pages: int = 15) -> str:
     """
-    Scrape, extract, and specifically clean main content from a URL.
+    Scrape, extract, and specifically clean content from a URL and its subpages.
     Uses a shared Playwright browser instance for efficiency.
     """
     browser = pw_manager.get_browser()
@@ -237,94 +263,89 @@ async def extract_text_from_url(url: str) -> str:
         logger.warning(f"Playwright browser not initialized, falling back to static for {url}")
         return await _extract_text_static(url)
 
-    context = None
-    page = None
+    visited = set()
+    to_visit = [url]
+    all_text_parts = []
+
     try:
-        # Create a new context and page for each request to isolate sessions/cookies
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             viewport={'width': 1280, 'height': 900}
         )
-        page = await context.new_page()
         
-        logger.info(f"Scraping URL (Structural): {url}")
-        
-        # 1. Navigation with retry/timeout logic
-        try:
-            response = await page.goto(url, wait_until="networkidle", timeout=45000)
-        except Exception as e:
-            logger.warning(f"Initial navigation timed out for {url}, attempting capture anyway. Error: {e}")
-            response = None
-
-        # 2. SPA Recovery: Handle 404/Empty pages common in React/Vercel
-        if not response or response.status == 404:
-            parsed_url = urlparse(url)
-            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
-            path = parsed_url.path.strip('/')
+        while to_visit and len(visited) < max_pages:
+            current_url = to_visit.pop(0)
+            if current_url in visited:
+                continue
+                
+            visited.add(current_url)
+            page = await context.new_page()
             
-            if path:
-                logger.info(f"Direct hit 404 or failed. Recovery via base: {base_url}")
+            try:
+                logger.info(f"Scraping [{len(visited)}/{max_pages}]: {current_url}")
+                
+                # 1. Navigation with SPA Recovery
+                response = None
                 try:
-                    await page.goto(base_url, wait_until="networkidle", timeout=30000)
-                    
-                    # Exact Link Search: finds the link to the subpage on the home page
-                    link = page.locator(f"a[href='/#/{path}'], a[href='/{path}'], a[href='{path}']").first
-                    if await link.count() > 0:
-                        logger.info(f"Found recovery link for {path}, clicking...")
-                        await link.click()
-                        await page.wait_for_load_state("networkidle")
-                    else:
-                        logger.warning(f"Recovery link not found for path: {path}")
-                except Exception as recovery_err:
-                    logger.warning(f"Recovery navigation failed: {recovery_err}")
+                    response = await page.goto(current_url, wait_until="networkidle", timeout=30000)
+                except Exception:
+                    logger.warning(f"Timeout/Error loading {current_url}, attempting recovery...")
 
-        # 3. Handle typical 'Newsletter/Cookie' popups
-        try:
-            await page.keyboard.press("Escape")
-        except: pass
+                # SPA Recovery: If direct hit fails/404s, try navigating to base and clicking
+                if not response or response.status == 404:
+                    parsed_url = urlparse(current_url)
+                    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+                    path = parsed_url.path.strip('/')
+                    if path:
+                        try:
+                            await page.goto(base_url, wait_until="networkidle", timeout=30000)
+                            # Try to find the link on the home page and click it
+                            link = page.locator(f"a[href$='{path}']").first
+                            if await link.count() > 0:
+                                await link.click()
+                                await page.wait_for_load_state("networkidle")
+                        except Exception as recovery_err:
+                            logger.warning(f"Recovery failed for {current_url}: {recovery_err}")
 
-        # 4. Smart Dynamic Scroll
-        await page.evaluate("""
-            async () => {
-                await new Promise((resolve) => {
-                    let totalHeight = 0;
-                    let distance = 250;
-                    let timer = setInterval(() => {
-                        let scrollHeight = document.body.scrollHeight;
-                        window.scrollBy(0, distance);
-                        totalHeight += distance;
-                        if(totalHeight >= scrollHeight || totalHeight > 8000){
-                            clearInterval(timer);
-                            resolve();
-                        }
-                    }, 100);
-                });
-            }
-        """)
-        
-        # 5. Wait for Hydration
-        await asyncio.sleep(2)
-        
-        # 6. Capture
-        content = await page.content()
-        soup = BeautifulSoup(content, "html.parser")
-        text = clean_url_text(soup)
-        
-        # If Playwright fails to get substantial content, try the static fallback
-        if len(text.split()) < 10:
-            logger.warning(f"Playwright results sparse for {url}, trying static fallback")
+                # 2. Wait for dynamic content (hydration)
+                await asyncio.sleep(2.5) 
+                
+                # 3. Escape popups
+                try: await page.keyboard.press("Escape")
+                except: pass
+
+                # 4. Capture Content
+                content = await page.content()
+                soup = BeautifulSoup(content, "html.parser")
+                
+                # Extract text from this page
+                page_text = clean_url_text(soup)
+                if page_text:
+                    all_text_parts.append(f"--- SOURCE: {current_url} ---\n{page_text}")
+                
+                # 5. Extract links for further crawling (only from the first few pages)
+                if len(visited) <= 3:
+                    internal_links = get_internal_links(soup, current_url)
+                    internal_links.sort(key=len)
+                    for link in internal_links:
+                        if link not in visited and link not in to_visit:
+                            to_visit.append(link)
+                            
+            except Exception as page_err:
+                logger.error(f"Error scraping {current_url}: {page_err}")
+            finally:
+                await page.close()
+
+        if not all_text_parts:
             return await _extract_text_static(url)
             
-        return text
+        return "\n\n\n".join(all_text_parts)
 
     except Exception as e:
-        logger.error(f"Scraper structural failure for {url}: {e}")
+        logger.error(f"Crawler structural failure for {url}: {e}")
         return await _extract_text_static(url)
     
     finally:
-        # Close page and context, but KEEP browser open
-        if page:
-            await page.close()
         if context:
             await context.close()
 
